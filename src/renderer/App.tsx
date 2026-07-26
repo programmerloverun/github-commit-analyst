@@ -39,6 +39,8 @@ export default function App() {
   const [phase, setPhase] = useState<'input' | 'select' | 'results'>(saved.current.username ? 'select' : 'input')
   const autoFetched = useRef(false)
   const [detecting, setDetecting] = useState(false)
+  const statsCache = useRef<Map<string, OverallStats>>(new Map())
+  const lastRepoKey = useRef('')
 
   const changeLang = (l: Lang) => {
     setLang(l)
@@ -74,11 +76,26 @@ export default function App() {
     const selectedRepos = reposList.filter((r) => sel.has(r.id))
     if (selectedRepos.length === 0) return
 
+    // Build a key from the selected repos and time range — if unchanged, reuse cached result
+    const repoKey = [...sel].sort().join(',')
+    const rangeKey = JSON.stringify(range)
+    const cacheKey = `${repoKey}|${rangeKey}`
+
+    if (cacheKey === lastRepoKey.current) {
+      const cached = statsCache.current.get(cacheKey)
+      if (cached) {
+        setStats(cached)
+        setPhase('results')
+        return
+      }
+    }
+
     setLoading(true)
     setError(null)
     setStats(null)
 
     const { since, until } = timeRangeToParams(range)
+    console.log(`[doAnalyze] range=${rangeKey}, since=${since}, until=${until}`)
 
     try {
       const result = await window.api.fetchAllStats({
@@ -88,6 +105,8 @@ export default function App() {
         since,
         until
       })
+      statsCache.current.set(cacheKey, result)
+      lastRepoKey.current = cacheKey
       setStats(result)
       setPhase('results')
     } catch (e: any) {
@@ -118,6 +137,8 @@ export default function App() {
       setSelected(new Set(result.map((r) => r.id)))
       setPhase('select')
       setStats(null)
+      statsCache.current.clear()
+      lastRepoKey.current = ''
       saved.current = { username: name, token: tkn }
     } catch (e: any) {
       if (e.message?.includes('404') || e.message?.includes('Not Found')) {
@@ -133,6 +154,8 @@ export default function App() {
   }
 
   const toggleRepo = (id: number) => {
+    statsCache.current.clear()
+    lastRepoKey.current = ''
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -142,11 +165,15 @@ export default function App() {
   }
 
   const handleForceRefresh = async () => {
+    statsCache.current.clear()
+    lastRepoKey.current = ''
     await window.api.clearCache({ username })
     doAnalyze(repos, selected, timeRange)
   }
 
   const handleBack = () => {
+    statsCache.current.clear()
+    lastRepoKey.current = ''
     setPhase('input')
     setRepos([])
     setStats(null)
