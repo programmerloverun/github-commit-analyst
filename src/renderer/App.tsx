@@ -152,6 +152,14 @@ export default function App() {
     }
   }
 
+  const handleOAuthLogin = async () => {
+    const result = await window.api.oauthLogin()
+    setUsername(result.username)
+    setToken(result.token)
+    saveSettings(result.username, result.token)
+    await handleFetchRepos(result.username, result.token)
+  }
+
   const handleFetchRepos = async (name: string, tkn: string) => {
     setLoadingRepos(true)
     setError(null)
@@ -247,6 +255,7 @@ export default function App() {
         {phase === 'input' && (
           <RepoInput
             onFetchRepos={handleFetchRepos}
+            onOAuthLogin={handleOAuthLogin}
             loading={loadingRepos}
             initialUsername={username}
             initialToken={token}

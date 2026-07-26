@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, shell, screen, globalShortcut } from 'elec
 import { join } from 'path'
 import { execSync } from 'child_process'
 import { fetchUserRepos, fetchAllCommitStats, initCache, clearUserCache } from './github'
+import { startOAuthFlow } from './oauth'
 
 let mainWindow: BrowserWindow | null = null
 let isHidden = false
@@ -191,6 +192,10 @@ ipcMain.handle('toggle-sidebar', async () => {
 
 ipcMain.handle('quit-app', async () => {
   app.quit()
+})
+
+ipcMain.handle('oauth-login', async () => {
+  return startOAuthFlow()
 })
 
 app.whenReady().then(() => {

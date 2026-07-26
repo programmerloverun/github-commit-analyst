@@ -15,7 +15,9 @@ const api = {
   toggleSidebar: () =>
     ipcRenderer.invoke('toggle-sidebar') as Promise<void>,
   quitApp: () =>
-    ipcRenderer.invoke('quit-app') as Promise<void>
+    ipcRenderer.invoke('quit-app') as Promise<void>,
+  oauthLogin: () =>
+    ipcRenderer.invoke('oauth-login') as Promise<{ username: string; token: string }>
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -201,6 +201,73 @@ body {
   cursor: not-allowed;
 }
 
+/* === OAuth Button === */
+.oauth-btn {
+  width: 100%;
+  padding: 10px 16px;
+  background: #24292e;
+  color: white;
+  border: 1px solid #1b1f23;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.oauth-btn:hover:not(:disabled) {
+  background: #2d333b;
+}
+
+.oauth-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.oauth-error {
+  background: rgba(255, 69, 58, 0.08);
+  border: 1px solid rgba(255, 69, 58, 0.2);
+  color: #ff3b30;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.manual-toggle {
+  text-align: center;
+  margin-top: 4px;
+}
+
+.manual-toggle button {
+  background: none;
+  border: none;
+  color: #007aff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.manual-toggle button:hover {
+  color: #0066d6;
+  background: rgba(0, 122, 255, 0.06);
+}
+
+.manual-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
 /* === Stats Cards === */
 .stats-cards {
   display: grid;

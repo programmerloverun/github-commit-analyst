@@ -122,6 +122,7 @@ export interface Api {
   openExternal: (url: string) => Promise<void>
   toggleSidebar: () => Promise<void>
   quitApp: () => Promise<void>
+  oauthLogin: () => Promise<{ username: string; token: string }>
 }
 
 declare global {

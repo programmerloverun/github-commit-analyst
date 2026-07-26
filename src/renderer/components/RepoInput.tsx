@@ -3,6 +3,7 @@ import { type Lang, t } from '../i18n'
 
 interface Props {
   onFetchRepos: (username: string, token: string) => void
+  onOAuthLogin: () => Promise<void>
   loading: boolean
   initialUsername: string
   initialToken: string
@@ -10,9 +11,12 @@ interface Props {
   lang: Lang
 }
 
-export default function RepoInput({ onFetchRepos, loading, initialUsername, initialToken, detecting, lang }: Props) {
+export default function RepoInput({ onFetchRepos, onOAuthLogin, loading, initialUsername, initialToken, detecting, lang }: Props) {
   const [username, setUsername] = useState(initialUsername)
   const [token, setToken] = useState(initialToken)
+  const [showManual, setShowManual] = useState(false)
+  const [oauthError, setOauthError] = useState<string | null>(null)
+  const [oauthLoading, setOauthLoading] = useState(false)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -21,33 +25,87 @@ export default function RepoInput({ onFetchRepos, loading, initialUsername, init
     onFetchRepos(name, token.trim() || '')
   }
 
+  const handleOAuth = async () => {
+    setOauthError(null)
+    setOauthLoading(true)
+    try {
+      await onOAuthLogin()
+    } catch (e: any) {
+      setOauthError(e.message || t('oauthFailed', lang))
+    } finally {
+      setOauthLoading(false)
+    }
+  }
+
+  const busy = loading || detecting || oauthLoading
+
   return (
     <form className="repo-input" onSubmit={handleSubmit}>
-      <div className="input-row">
-        <div className="input-group">
-          <label>{t('username', lang)}</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="e.g. torvalds"
-            required
-          />
-        </div>
-        <div className="input-group">
-          <label>{t('token', lang)}</label>
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder={t('tokenPlaceholder', lang)}
-          />
-        </div>
-      </div>
-      <button type="submit" disabled={loading || detecting}>
-        {detecting ? t('detecting', lang) : loading ? t('fetchingRepos', lang) : t('fetchRepos', lang)}
+      {/* OAuth sign-in */}
+      <button
+        type="button"
+        className="oauth-btn"
+        onClick={handleOAuth}
+        disabled={busy}
+      >
+        {oauthLoading ? (
+          <>
+            <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+            {t('signingIn', lang)}
+          </>
+        ) : (
+          <>
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+              <path fillRule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+            </svg>
+            {t('signInWithGitHub', lang)}
+          </>
+        )}
       </button>
-      <p className="input-hint">{t('detectHint', lang)}</p>
+
+      {oauthError && (
+        <div className="oauth-error">{oauthError}</div>
+      )}
+
+      {/* Manual setup toggle */}
+      <div className="manual-toggle">
+        <button type="button" onClick={() => setShowManual(!showManual)}>
+          {t('manualSetup', lang)}
+        </button>
+      </div>
+
+      {showManual && (
+        <div className="manual-section">
+          <div className="input-row">
+            <div className="input-group">
+              <label>{t('username', lang)}</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. torvalds"
+                required
+              />
+            </div>
+            <div className="input-group">
+              <label>{t('token', lang)}</label>
+              <input
+                type="password"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder={t('tokenPlaceholder', lang)}
+              />
+            </div>
+          </div>
+          <button type="submit" disabled={busy}>
+            {detecting ? t('detecting', lang) : loading ? t('fetchingRepos', lang) : t('fetchRepos', lang)}
+          </button>
+        </div>
+      )}
+
+      {detecting && showManual && (
+        <p className="input-hint">{t('detecting', lang)}</p>
+      )}
     </form>
   )
 }

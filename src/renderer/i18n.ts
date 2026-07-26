@@ -81,7 +81,13 @@ const translations: Record<Lang, Record<string, string>> = {
     to: '到',
     beginning: '有记录以来',
     now: '现在',
-    recentCommits: '最近提交'
+    recentCommits: '最近提交',
+    signInWithGitHub: '使用 GitHub 登录',
+    signingIn: '正在打开浏览器进行 GitHub 授权...',
+    manualSetup: '手动设置',
+    oauthFailed: 'GitHub 登录失败',
+    oauthConfigMissing: 'GitHub OAuth 未配置',
+    oauthTimeout: 'GitHub 登录超时，请重试'
   },
   en: {
     title: 'GitHub Commit Analyst',
@@ -163,7 +169,13 @@ const translations: Record<Lang, Record<string, string>> = {
     to: 'to',
     beginning: 'beginning',
     now: 'now',
-    recentCommits: 'Recent Commits'
+    recentCommits: 'Recent Commits',
+    signInWithGitHub: 'Sign in with GitHub',
+    signingIn: 'Opening browser for GitHub authorization...',
+    manualSetup: 'Manual setup',
+    oauthFailed: 'GitHub sign in failed',
+    oauthConfigMissing: 'GitHub OAuth not configured',
+    oauthTimeout: 'GitHub sign in timed out, please try again'
   }
 }
 
