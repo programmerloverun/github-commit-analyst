@@ -135,7 +135,64 @@ export async function fetchUserRepos(
     page++
   }
 
+  // Also search for contributed repos (PRs to repos user doesn't own/collaborate on)
+  if (token) {
+    const contributed = await searchContributedRepos(octokit, username)
+    const existingIds = new Set(repos.map((r) => r.id))
+    for (const r of contributed) {
+      if (!existingIds.has(r.id)) {
+        repos.push(r)
+        existingIds.add(r.id)
+      }
+    }
+  }
+
   return repos
+}
+
+async function searchContributedRepos(
+  octokit: Octokit,
+  username: string
+): Promise<RepoInfo[]> {
+  const repoMap = new Map<number, RepoInfo>()
+  let page = 1
+
+  while (page <= 10) {
+    try {
+      const { data } = await octokit.rest.search.commits({
+        q: `author:${username}`,
+        per_page: 100,
+        page,
+        sort: 'author-date',
+        order: 'desc'
+      })
+
+      if (data.items.length === 0) break
+
+      for (const item of data.items) {
+        const repo = item.repository
+        if (!repo || repoMap.has(repo.id)) continue
+        if (repo.fork) continue
+        repoMap.set(repo.id, {
+          id: repo.id,
+          owner: repo.owner.login,
+          name: repo.name,
+          fullName: repo.full_name,
+          stars: repo.stargazers_count ?? 0,
+          language: repo.language ?? '',
+          description: repo.description ?? '',
+          isPrivate: repo.private ?? false
+        })
+      }
+
+      if (data.items.length < 100) break
+      page++
+    } catch {
+      break
+    }
+  }
+
+  return Array.from(repoMap.values())
 }
 
 async function fetchRepoCommits(
