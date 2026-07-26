@@ -1,0 +1,14 @@
+.vscode/**
+src/**
+!src/webview/**
+node_modules/**
+.gitignore
+*.md
+dist/**
+out/main/**
+out/preload/**
+out/renderer/**
+!out/extension.js
+!out/github.js
+electron.vite.config.ts
+tsconfig.node.json
