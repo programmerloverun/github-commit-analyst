@@ -738,3 +738,75 @@ body {
   color: #8b949e;
   font-size: 13px;
 }
+
+/* Commit List */
+.commit-list-section {
+  margin-bottom: 24px;
+}
+
+.commit-list-section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f0f6fc;
+  margin-bottom: 12px;
+}
+
+.commit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.commit-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.commit-item:hover {
+  border-color: #1f6feb;
+  background: #1a2033;
+}
+
+.commit-repo {
+  font-size: 12px;
+  color: #58a6ff;
+  background: rgba(88, 166, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.commit-date {
+  font-size: 12px;
+  color: #6e7681;
+  white-space: nowrap;
+}
+
+.commit-msg {
+  flex: 1;
+  font-size: 13px;
+  color: #c9d1d9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.commit-stats {
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

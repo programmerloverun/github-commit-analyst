@@ -6,6 +6,7 @@ import StatsCards from './components/StatsCards'
 import DailyTable from './components/DailyTable'
 import CommitCharts from './components/CommitCharts'
 import AnalysisPanel from './components/AnalysisPanel'
+import CommitList from './components/CommitList'
 import NetworkGraph from './components/NetworkGraph'
 import type { RepoInfo, OverallStats, TimeRange } from './types'
 import { timeRangeToParams } from './types'
@@ -255,6 +256,7 @@ export default function App() {
             lang={lang}
           />
           <AnalysisPanel stats={stats} lang={lang} />
+          <CommitList commits={stats.recentCommits} lang={lang} />
           <DailyTable dailyStats={stats.dailyStats} lang={lang} />
         </>
       )}

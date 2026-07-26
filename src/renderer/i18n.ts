@@ -80,7 +80,8 @@ const translations: Record<Lang, Record<string, string>> = {
     from: '从',
     to: '到',
     beginning: '有记录以来',
-    now: '现在'
+    now: '现在',
+    recentCommits: '最近提交'
   },
   en: {
     title: 'GitHub Commit Analyst',
@@ -161,7 +162,8 @@ const translations: Record<Lang, Record<string, string>> = {
     from: 'from',
     to: 'to',
     beginning: 'beginning',
-    now: 'now'
+    now: 'now',
+    recentCommits: 'Recent Commits'
   }
 }
 

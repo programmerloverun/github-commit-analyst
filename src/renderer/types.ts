@@ -40,6 +40,16 @@ export interface RepoStats {
   deletions: number
 }
 
+export interface CommitDetail {
+  sha: string
+  message: string
+  repo: string
+  date: string
+  additions: number
+  deletions: number
+  url: string
+}
+
 export interface OverallStats {
   username: string
   dailyStats: DailyStats[]
@@ -48,6 +58,7 @@ export interface OverallStats {
   totalDeletions: number
   repoCount: number
   repoStats: RepoStats[]
+  recentCommits: CommitDetail[]
 }
 
 export type TimeRange =

@@ -29,6 +29,16 @@ export interface RepoStats {
   deletions: number
 }
 
+export interface CommitDetail {
+  sha: string
+  message: string
+  repo: string
+  date: string
+  additions: number
+  deletions: number
+  url: string
+}
+
 export interface OverallStats {
   username: string
   dailyStats: DailyStats[]
@@ -37,6 +47,7 @@ export interface OverallStats {
   totalDeletions: number
   repoCount: number
   repoStats: RepoStats[]
+  recentCommits: CommitDetail[]
 }
 
 // ---- Cache layer ----
@@ -269,12 +280,13 @@ async function fetchRepoCommits(
   repo: { owner: string; name: string },
   since?: string,
   until?: string
-): Promise<Map<string, DailyRecord>> {
+): Promise<{ dailyMap: Map<string, DailyRecord>; commits: CommitDetail[] }> {
   const dailyMap = new Map<string, DailyRecord>()
+  const commits: CommitDetail[] = []
   let page = 1
 
   while (true) {
-    let commits: any[]
+    let list: any[]
     try {
       const { data } = await octokit.rest.repos.listCommits({
         owner: repo.owner,
@@ -285,25 +297,27 @@ async function fetchRepoCommits(
         since: since || undefined,
         until: until || undefined
       })
-      commits = data
+      list = data
     } catch {
       break
     }
 
-    if (commits.length === 0) break
+    if (list.length === 0) break
 
-    for (const commit of commits) {
-      if (!commit.sha) continue
+    for (const c of list) {
+      if (!c.sha) continue
+      // Skip merge commits — their stats include the entire merged PR diff
+      if (c.parents && c.parents.length > 1) continue
 
       try {
         const { data: detailed } = await octokit.rest.repos.getCommit({
           owner: repo.owner,
           repo: repo.name,
-          ref: commit.sha
+          ref: c.sha
         })
 
         const stats = detailed.stats
-        const date = commit.commit?.author?.date
+        const date = c.commit?.author?.date
         if (!stats || !date) continue
 
         const dateKey = date.split('T')[0]
@@ -313,16 +327,27 @@ async function fetchRepoCommits(
           additions: cur.additions + (stats.additions || 0),
           deletions: cur.deletions + (stats.deletions || 0)
         })
+
+        const msg = (c.commit?.message || '').split('\n')[0]
+        commits.push({
+          sha: c.sha,
+          message: msg.length > 100 ? msg.slice(0, 97) + '...' : msg,
+          repo: `${repo.owner}/${repo.name}`,
+          date: dateKey,
+          additions: stats.additions || 0,
+          deletions: stats.deletions || 0,
+          url: `https://github.com/${repo.owner}/${repo.name}/commit/${c.sha}`
+        })
       } catch {
-        // skip
+        // skip individual commit on error
       }
     }
 
-    if (commits.length < 100) break
+    if (list.length < 100) break
     page++
   }
 
-  return dailyMap
+  return { dailyMap, commits }
 }
 
 async function processOneRepo(
@@ -331,6 +356,7 @@ async function processOneRepo(
   repo: { owner: string; name: string },
   userCache: UserCache,
   combinedMap: Map<string, DailyRecord>,
+  allCommits: CommitDetail[],
   now: string,
   since?: string,
   until?: string
@@ -347,7 +373,7 @@ async function processOneRepo(
     if (since && cachedDates.length > 0 && since < cachedDates[0]) {
       console.log(`[processOneRepo] backfilling ${repoKey}: since=${since} < earliestCached=${cachedDates[0]}`)
       const older = await fetchRepoCommits(octokit, username, repo, undefined, cachedDates[0])
-      for (const [d, r] of older) {
+      for (const [d, r] of older.dailyMap) {
         const existing = cachedRepo.dailyMap[d]
         cachedRepo.dailyMap[d] = existing
           ? { commits: existing.commits + r.commits, additions: existing.additions + r.additions, deletions: existing.deletions + r.deletions }
@@ -358,8 +384,8 @@ async function processOneRepo(
     // Incremental fetch: commits pushed since last cache update
     const newCommits = await fetchRepoCommits(octokit, username, repo, cachedRepo.lastFetched)
 
-    if (newCommits.size > 0) {
-      for (const [d, r] of newCommits) {
+    if (newCommits.dailyMap.size > 0) {
+      for (const [d, r] of newCommits.dailyMap) {
         const existing = cachedRepo.dailyMap[d]
         cachedRepo.dailyMap[d] = existing
           ? { commits: existing.commits + r.commits, additions: existing.additions + r.additions, deletions: existing.deletions + r.deletions }
@@ -375,11 +401,11 @@ async function processOneRepo(
   } else {
     // First fetch: always pull ALL commits so the cache has complete data.
     // Time range filtering is done at the display layer, not the cache layer.
-    const newCommits = await fetchRepoCommits(octokit, username, repo)
-    hasData = newCommits.size > 0
+    const result = await fetchRepoCommits(octokit, username, repo)
+    hasData = result.dailyMap.size > 0
 
     const newMap: Record<string, DailyRecord> = {}
-    for (const [d, r] of newCommits) {
+    for (const [d, r] of result.dailyMap) {
       newMap[d] = r
       const cur = combinedMap.get(d) || { commits: 0, additions: 0, deletions: 0 }
       combinedMap.set(d, {
@@ -406,12 +432,13 @@ export async function fetchAllCommitStats(
   const userCache = loadUserCache(username)
   const now = new Date().toISOString()
   const combinedMap = new Map<string, DailyRecord>()
+  const allCommits: CommitDetail[] = []
 
   console.log(`[fetchAllCommitStats] since=${since}, until=${until}, repos=${repos.length}`)
 
   // Process all repos with thread pool
   const results = await runWithConcurrency(repos, async (repo) => {
-    const hasData = await processOneRepo(octokit, username, repo, userCache, combinedMap, now, since, until)
+    const hasData = await processOneRepo(octokit, username, repo, userCache, combinedMap, allCommits, now, since, until)
     return { hasData, fullName: `${repo.owner}/${repo.name}` }
   })
 
@@ -459,6 +486,16 @@ export async function fetchAllCommitStats(
 
   console.log(`[fetchAllCommitStats] filtered: ${dailyStats.length} days, commits=${totalCommits}, adds=${totalAdditions}, dels=${totalDeletions}`)
 
+  // Filter commit details by time range, sorted newest first, capped at 100
+  const recentCommits = allCommits
+    .filter((c) => {
+      if (since && c.date < since) return false
+      if (until && c.date > until) return false
+      return true
+    })
+    .sort((a, b) => b.date.localeCompare(a.date) || b.sha.localeCompare(a.sha))
+    .slice(0, 100)
+
   return {
     username,
     dailyStats,
@@ -466,6 +503,7 @@ export async function fetchAllCommitStats(
     totalAdditions,
     totalDeletions,
     repoCount: validRepoCount,
-    repoStats
+    repoStats,
+    recentCommits
   }
 }
