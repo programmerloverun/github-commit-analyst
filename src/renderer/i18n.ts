@@ -75,7 +75,12 @@ const translations: Record<Lang, Record<string, string>> = {
     byStars: '按 Star 数',
     byCommits: '按提交次数',
     closerMeansMore: '越近表示越多',
-    nodeSize: '节点大小表示相对数量'
+    nodeSize: '节点大小表示相对数量',
+    filterRange: '筛选范围',
+    from: '从',
+    to: '到',
+    beginning: '有记录以来',
+    now: '现在'
   },
   en: {
     title: 'GitHub Commit Analyst',
@@ -151,7 +156,12 @@ const translations: Record<Lang, Record<string, string>> = {
     byStars: 'By Stars',
     byCommits: 'By Commits',
     closerMeansMore: 'Closer = more',
-    nodeSize: 'Node size = relative volume'
+    nodeSize: 'Node size = relative volume',
+    filterRange: 'Filter range',
+    from: 'from',
+    to: 'to',
+    beginning: 'beginning',
+    now: 'now'
   }
 }
 

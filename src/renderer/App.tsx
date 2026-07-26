@@ -239,6 +239,9 @@ export default function App() {
         <>
           <div className="summary-bar">
             {t('summary', lang, { username: stats.username, count: stats.repoCount })}
+            <div className="filter-range-display">
+              {t('filterRange', lang)}: {t('from', lang)} {timeRangeToParams(timeRange).since || t('beginning', lang)} {t('to', lang)} {timeRangeToParams(timeRange).until || t('now', lang)}
+            </div>
             <div style={{ marginTop: 8 }}>
               <TimeRangeSelector value={timeRange} onChange={handleTimeRangeChange} lang={lang} />
             </div>

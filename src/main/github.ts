@@ -340,11 +340,25 @@ async function processOneRepo(
   let hasData = false
 
   if (cachedRepo) {
-    // Incremental fetch: only commits since last cache update
+    const cachedDates = Object.keys(cachedRepo.dailyMap).sort()
+
+    // Backfill: if the requested range starts before the earliest cached date,
+    // fetch older commits so the cache covers the full requested range.
+    if (since && cachedDates.length > 0 && since < cachedDates[0]) {
+      console.log(`[processOneRepo] backfilling ${repoKey}: since=${since} < earliestCached=${cachedDates[0]}`)
+      const older = await fetchRepoCommits(octokit, username, repo, undefined, cachedDates[0])
+      for (const [d, r] of older) {
+        const existing = cachedRepo.dailyMap[d]
+        cachedRepo.dailyMap[d] = existing
+          ? { commits: existing.commits + r.commits, additions: existing.additions + r.additions, deletions: existing.deletions + r.deletions }
+          : r
+      }
+    }
+
+    // Incremental fetch: commits pushed since last cache update
     const newCommits = await fetchRepoCommits(octokit, username, repo, cachedRepo.lastFetched)
 
     if (newCommits.size > 0) {
-      // Merge new commits into the existing cache
       for (const [d, r] of newCommits) {
         const existing = cachedRepo.dailyMap[d]
         cachedRepo.dailyMap[d] = existing
