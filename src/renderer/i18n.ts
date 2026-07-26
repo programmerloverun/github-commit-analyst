@@ -59,6 +59,8 @@ const translations: Record<Lang, Record<string, string>> = {
     emptyHint: '输入 GitHub 用户名，分析其所有公开仓库的提交历史。',
     fetchingReposFor: '正在获取 {name} 的仓库列表...',
     private: '私有',
+    contributed: '开源贡献',
+    own: '我的仓库',
     changeUser: '切换用户',
     language: '语言',
     commitLineChanges: '提交行数变化'
@@ -121,6 +123,8 @@ const translations: Record<Lang, Record<string, string>> = {
     emptyHint: 'Enter a GitHub username to analyze commit history across all repositories.',
     fetchingReposFor: 'Fetching repositories for {name}...',
     private: 'Private',
+    contributed: 'OSS Contrib',
+    own: 'My Repos',
     changeUser: 'Change user',
     language: 'Language',
     commitLineChanges: 'Commit Line Changes'

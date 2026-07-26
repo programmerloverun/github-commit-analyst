@@ -14,6 +14,7 @@ export interface RepoInfo {
   language: string
   description: string
   isPrivate: boolean
+  source: 'own' | 'contributed'
 }
 
 export interface OverallStats {

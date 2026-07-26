@@ -41,6 +41,7 @@ export default function RepoSelector({
               <span className="repo-name">
                 {repo.fullName}
                 {repo.isPrivate && <span className="private-badge">{t('private', lang)}</span>}
+                {repo.source === 'contributed' && <span className="contrib-badge">{t('contributed', lang)}</span>}
               </span>
               <span className="repo-meta">
                 {repo.language && <span className="repo-lang">{repo.language}</span>}

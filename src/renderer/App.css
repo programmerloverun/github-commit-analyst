@@ -469,6 +469,18 @@ body {
   vertical-align: middle;
 }
 
+.contrib-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  color: #7ee787;
+  border: 1px solid #7ee787;
+  border-radius: 10px;
+  padding: 0 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 /* Time Range Selector */
 .time-range {
   background: #161b22;

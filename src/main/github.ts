@@ -18,6 +18,7 @@ export interface RepoInfo {
   language: string
   description: string
   isPrivate: boolean
+  source: 'own' | 'contributed'
 }
 
 export interface OverallStats {
@@ -33,10 +34,10 @@ export interface OverallStats {
 
 type DailyRecord = { commits: number; additions: number; deletions: number }
 type RepoCache = { lastFetched: string; dailyMap: Record<string, DailyRecord> }
-type UserCache = Record<string, RepoCache>       // key: "owner/repo"
+type UserCache = Record<string, RepoCache>
 
 let cachePath = ''
-let cacheData: Record<string, UserCache> = {}  // key: username
+let cacheData: Record<string, UserCache> = {}
 
 export function initCache(dataDir: string) {
   cachePath = join(dataDir, 'commit-cache.json')
@@ -55,9 +56,7 @@ export function initCache(dataDir: string) {
 function saveCache() {
   try {
     writeFileSync(cachePath, JSON.stringify(cacheData))
-  } catch {
-    // ignore write failures
-  }
+  } catch {}
 }
 
 export function clearUserCache(username: string) {
@@ -88,6 +87,29 @@ function mergeDailyMap(
   }
 }
 
+// ---- Thread pool ----
+
+const CONCURRENCY = 6
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = []
+  const queue = [...items]
+
+  async function worker() {
+    while (queue.length > 0) {
+      const item = queue.shift()!
+      results.push(await fn(item))
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(CONCURRENCY, items.length) }, () => worker())
+  await Promise.all(workers)
+  return results
+}
+
 // ---- API functions ----
 
 export async function fetchUserRepos(
@@ -99,6 +121,7 @@ export async function fetchUserRepos(
   const repos: RepoInfo[] = []
   let page = 1
 
+  // Fetch owned + collaborator repos
   while (true) {
     const { data } = token
       ? await octokit.rest.repos.listForAuthenticatedUser({
@@ -127,7 +150,8 @@ export async function fetchUserRepos(
         stars: r.stargazers_count ?? 0,
         language: r.language ?? '',
         description: r.description ?? '',
-        isPrivate: r.private ?? false
+        isPrivate: r.private ?? false,
+        source: 'own'
       })
     }
 
@@ -135,7 +159,7 @@ export async function fetchUserRepos(
     page++
   }
 
-  // Also search for contributed repos (PRs to repos user doesn't own/collaborate on)
+  // Search for contributed repos (open source PRs where user is not owner/collaborator)
   if (token) {
     const contributed = await searchContributedRepos(octokit, username)
     const existingIds = new Set(repos.map((r) => r.id))
@@ -172,7 +196,10 @@ async function searchContributedRepos(
       for (const item of data.items) {
         const repo = item.repository
         if (!repo || repoMap.has(repo.id)) continue
+        // Skip forks AND repos owned by the user (already in own list)
         if (repo.fork) continue
+        if (repo.owner.login === username) continue
+
         repoMap.set(repo.id, {
           id: repo.id,
           owner: repo.owner.login,
@@ -181,7 +208,8 @@ async function searchContributedRepos(
           stars: repo.stargazers_count ?? 0,
           language: repo.language ?? '',
           description: repo.description ?? '',
-          isPrivate: repo.private ?? false
+          isPrivate: repo.private ?? false,
+          source: 'contributed'
         })
       }
 
@@ -257,6 +285,59 @@ async function fetchRepoCommits(
   return dailyMap
 }
 
+async function processOneRepo(
+  octokit: Octokit,
+  username: string,
+  repo: { owner: string; name: string },
+  userCache: UserCache,
+  combinedMap: Map<string, DailyRecord>,
+  now: string
+): Promise<boolean> {
+  const repoKey = `${repo.owner}/${repo.name}`
+  const cachedRepo = userCache[repoKey]
+  let repoHasData = false
+
+  if (cachedRepo) {
+    mergeDailyMap(combinedMap, cachedRepo.dailyMap)
+    repoHasData = Object.keys(cachedRepo.dailyMap).length > 0
+
+    const newCommits = await fetchRepoCommits(octokit, username, repo, cachedRepo.lastFetched)
+
+    if (newCommits.size > 0) {
+      const newMap: Record<string, DailyRecord> = {}
+      for (const [d, r] of newCommits) {
+        newMap[d] = r
+        const cur = combinedMap.get(d) || { commits: 0, additions: 0, deletions: 0 }
+        combinedMap.set(d, {
+          commits: cur.commits + r.commits,
+          additions: cur.additions + r.additions,
+          deletions: cur.deletions + r.deletions
+        })
+      }
+      userCache[repoKey] = {
+        lastFetched: now,
+        dailyMap: { ...cachedRepo.dailyMap, ...newMap }
+      }
+      repoHasData = true
+    } else {
+      userCache[repoKey] = { ...cachedRepo, lastFetched: now }
+    }
+  } else {
+    const newCommits = await fetchRepoCommits(octokit, username, repo)
+    repoHasData = newCommits.size > 0
+
+    const newMap: Record<string, DailyRecord> = {}
+    for (const [d, r] of newCommits) {
+      newMap[d] = r
+      combinedMap.set(d, r)
+    }
+
+    userCache[repoKey] = { lastFetched: now, dailyMap: newMap }
+  }
+
+  return repoHasData
+}
+
 export async function fetchAllCommitStats(
   username: string,
   repos: { owner: string; name: string }[],
@@ -267,73 +348,17 @@ export async function fetchAllCommitStats(
   const octokit = new Octokit(token ? { auth: token } : {})
   const userCache = loadUserCache(username)
   const now = new Date().toISOString()
-
   const combinedMap = new Map<string, DailyRecord>()
-  let validRepoCount = 0
 
-  for (const repo of repos) {
-    const repoKey = `${repo.owner}/${repo.name}`
-    const cachedRepo = userCache[repoKey]
-    let repoHasData = false
+  // Process all repos with thread pool
+  const results = await runWithConcurrency(repos, (repo) =>
+    processOneRepo(octokit, username, repo, userCache, combinedMap, now)
+  )
 
-    if (cachedRepo) {
-      // Merge existing cached data
-      mergeDailyMap(combinedMap, cachedRepo.dailyMap)
-      repoHasData = Object.keys(cachedRepo.dailyMap).length > 0
-
-      // Fetch only new commits since last fetch
-      const newCommits = await fetchRepoCommits(
-        octokit, username, repo, cachedRepo.lastFetched
-      )
-
-      if (newCommits.size > 0) {
-        const newMap: Record<string, DailyRecord> = {}
-        for (const [d, r] of newCommits) {
-          newMap[d] = r
-          const cur = combinedMap.get(d) || { commits: 0, additions: 0, deletions: 0 }
-          combinedMap.set(d, {
-            commits: cur.commits + r.commits,
-            additions: cur.additions + r.additions,
-            deletions: cur.deletions + r.deletions
-          })
-        }
-
-        // Update cache
-        userCache[repoKey] = {
-          lastFetched: now,
-          dailyMap: { ...cachedRepo.dailyMap, ...newMap }
-        }
-        repoHasData = true
-      } else {
-        // No new commits, bump timestamp
-        userCache[repoKey] = {
-          ...cachedRepo,
-          lastFetched: now
-        }
-      }
-    } else {
-      // First fetch for this repo
-      const newCommits = await fetchRepoCommits(octokit, username, repo)
-      repoHasData = newCommits.size > 0
-
-      const newMap: Record<string, DailyRecord> = {}
-      for (const [d, r] of newCommits) {
-        newMap[d] = r
-        combinedMap.set(d, r)
-      }
-
-      userCache[repoKey] = {
-        lastFetched: now,
-        dailyMap: newMap
-      }
-    }
-
-    if (repoHasData) validRepoCount++
-  }
+  const validRepoCount = results.filter(Boolean).length
 
   saveUserCache(username, userCache)
 
-  // Filter by time range from combined cache
   const dailyStats: DailyStats[] = []
   let totalCommits = 0
   let totalAdditions = 0
