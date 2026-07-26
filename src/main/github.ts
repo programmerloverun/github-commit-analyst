@@ -304,43 +304,48 @@ async function fetchRepoCommits(
 
     if (list.length === 0) break
 
-    for (const c of list) {
-      if (!c.sha) continue
-      // Skip merge commits — their stats include the entire merged PR diff
-      if (c.parents && c.parents.length > 1) continue
+    // Filter out merge commits and commits without sha
+    const toFetch = list.filter((c: any) => c.sha && (!c.parents || c.parents.length <= 1))
 
+    // Fetch detailed stats concurrently (6 at a time) instead of one by one
+    const details = await runWithConcurrency(toFetch, async (c: any) => {
       try {
         const { data: detailed } = await octokit.rest.repos.getCommit({
           owner: repo.owner,
           repo: repo.name,
           ref: c.sha
         })
-
-        const stats = detailed.stats
-        const date = c.commit?.author?.date
-        if (!stats || !date) continue
-
-        const dateKey = date.split('T')[0]
-        const cur = dailyMap.get(dateKey) || { commits: 0, additions: 0, deletions: 0 }
-        dailyMap.set(dateKey, {
-          commits: cur.commits + 1,
-          additions: cur.additions + (stats.additions || 0),
-          deletions: cur.deletions + (stats.deletions || 0)
-        })
-
-        const msg = (c.commit?.message || '').split('\n')[0]
-        commits.push({
-          sha: c.sha,
-          message: msg.length > 100 ? msg.slice(0, 97) + '...' : msg,
-          repo: `${repo.owner}/${repo.name}`,
-          date: dateKey,
-          additions: stats.additions || 0,
-          deletions: stats.deletions || 0,
-          url: `https://github.com/${repo.owner}/${repo.name}/commit/${c.sha}`
-        })
+        return { c, detailed }
       } catch {
-        // skip individual commit on error
+        return null
       }
+    })
+
+    for (const item of details) {
+      if (!item) continue
+      const { c, detailed } = item
+      const stats = detailed.stats
+      const date = c.commit?.author?.date
+      if (!stats || !date) continue
+
+      const dateKey = date.split('T')[0]
+      const cur = dailyMap.get(dateKey) || { commits: 0, additions: 0, deletions: 0 }
+      dailyMap.set(dateKey, {
+        commits: cur.commits + 1,
+        additions: cur.additions + (stats.additions || 0),
+        deletions: cur.deletions + (stats.deletions || 0)
+      })
+
+      const msg = (c.commit?.message || '').split('\n')[0]
+      commits.push({
+        sha: c.sha,
+        message: msg.length > 100 ? msg.slice(0, 97) + '...' : msg,
+        repo: `${repo.owner}/${repo.name}`,
+        date: dateKey,
+        additions: stats.additions || 0,
+        deletions: stats.deletions || 0,
+        url: `https://github.com/${repo.owner}/${repo.name}/commit/${c.sha}`
+      })
     }
 
     if (list.length < 100) break
