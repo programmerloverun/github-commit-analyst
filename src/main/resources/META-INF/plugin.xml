@@ -1,0 +1,28 @@
+<idea-plugin>
+    <id>com.github.commitanalyst</id>
+    <name>GitHub Commit Analyst</name>
+    <vendor email="programmerloverun@gmail.com" url="https://github.com/programmerloverun">programmerloverun</vendor>
+
+    <description>
+        Analyze GitHub commit history from the IDE sidebar.
+        View commit statistics, contribution graphs, and per-repo breakdowns.
+    </description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.github</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow
+            id="Commit Analyst"
+            anchor="right"
+            icon="AllIcons.Toolwindows.ToolWindowStructure"
+            factoryClass="com.github.commitanalyst.CommitAnalystToolWindowFactory"/>
+    </extensions>
+
+    <actions>
+        <action id="CommitAnalyst.Analyze" class="com.github.commitanalyst.AnalyzeAction"
+            text="Analyze Commits" description="Analyze GitHub commit history">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
