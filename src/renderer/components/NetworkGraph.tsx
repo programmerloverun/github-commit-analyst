@@ -1,14 +1,14 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import type { RepoInfo, RepoStats } from '../types'
 import { type Lang, t } from '../i18n'
 
 const LANG_COLORS: Record<string, string> = {
-  TypeScript: '#3178c6', JavaScript: '#f7df1e', Python: '#3572a5',
-  Go: '#00add8', Rust: '#dea584', Java: '#b07219', 'C++': '#f34b7d',
-  C: '#555555', Ruby: '#701516', Swift: '#f05138', Kotlin: '#a97bff',
-  PHP: '#4f5d95', HTML: '#e34c26', CSS: '#563d7c', Shell: '#89e051',
-  Vue: '#41b883', Scala: '#c22d40', Dart: '#00b4ab',
-  default: '#58a6ff'
+  TypeScript: '#58a6ff', JavaScript: '#f0c040', Python: '#79c0ff',
+  Go: '#6edbb0', Rust: '#f778ba', Java: '#ffa657', 'C++': '#f97583',
+  C: '#9ea2a8', Ruby: '#ff7b72', Swift: '#ff9b5c', Kotlin: '#c084fc',
+  PHP: '#8899d4', HTML: '#ff9870', CSS: '#79c0ff', Shell: '#7ee787',
+  Vue: '#56d364', Scala: '#f97583', Dart: '#5ccfe6',
+  default: '#e6e6e6'
 }
 
 interface NodeData {
@@ -17,7 +17,7 @@ interface NodeData {
 }
 
 interface PositionedNode extends NodeData {
-  x: number; y: number; r: number; color: string
+  x: number; y: number; r: number; color: string; ring: number
 }
 
 interface Props {
@@ -26,26 +26,26 @@ interface Props {
 
 type MetricMode = 'stars' | 'commits'
 
-const SVG_SIZE = 640
-const CX = 320
-const CY = 320
-const CENTER_R = 46
+const SVG_SIZE = 800
+const CX = 400
+const CY = 400
+const CENTER_R = 52
+const NODE_R = 10
+const MIN_GAP = 10
+const RING_GAP = NODE_R * 2 + MIN_GAP + 14
+const START_GAP = 80
 
 export default function NetworkGraph({ repoStats, repos, username, lang }: Props) {
   const [metric, setMetric] = useState<MetricMode>('commits')
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; node: PositionedNode } | null>(null)
-  const [positions, setPositions] = useState<PositionedNode[]>([])
-  const [animationPhase, setAnimationPhase] = useState(0)
-  const animFrame = useRef<number>(0)
 
-  // Build merged node data
   const nodes = useMemo(() => {
     const repoMap = new Map(repos.map(r => [r.fullName, r]))
     const merged: NodeData[] = []
     for (const rs of repoStats) {
       const repo = repoMap.get(rs.fullName)
-      if (!repo || repo.stars <= 0) continue
+      if (!repo) continue
       merged.push({
         fullName: rs.fullName, name: repo.name, owner: repo.owner,
         commits: rs.commits, stars: repo.stars, language: repo.language
@@ -54,96 +54,82 @@ export default function NetworkGraph({ repoStats, repos, username, lang }: Props
     return merged
   }, [repoStats, repos])
 
-  // Compute organic layout positions
-  useEffect(() => {
-    if (nodes.length === 0) return
+  // Starfield layout: nodes seeded with golden-angle spiral, then jittered and collision-resolved
+  const positions = useMemo(() => {
+    if (nodes.length === 0) return []
+
     const m = (n: NodeData) => metric === 'commits' ? n.commits : n.stars
-    const vals = nodes.map(m)
-    const maxV = Math.max(...vals, 1)
-    const minV = Math.min(...vals, 1)
-    const logMax = Math.log(maxV + 1)
-    const logMin = Math.log(minV + 1)
-
-    const norm = (v: number) => maxV === minV ? 0.5 : (Math.log(v + 1) - logMin) / (logMax - logMin)
-
-    // Sort to place large nodes first (they anchor the layout)
     const sorted = [...nodes].sort((a, b) => m(b) - m(a))
+    const maxVal = Math.max(...sorted.map(m), 1)
+    const minDist = NODE_R * 2 + MIN_GAP
+    const maxR = Math.min(CX, CY) - NODE_R - 4
+    const startR = CENTER_R + START_GAP
+
+    // Seeded random
+    let seed = 1
+    const rand = () => {
+      seed = (seed * 16807 + 0) % 2147483647
+      return (seed - 1) / 2147483646
+    }
+
     const placed: PositionedNode[] = []
-    const innerR = 100, outerR = 260
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5)) // ~137.5°
 
-    sorted.forEach((node, i) => {
-      const t = norm(m(node))
-      // Higher metric → smaller radius (closer)
-      const targetR = outerR - t * (outerR - innerR)
-      const size = 6 + t * 18
-      const color = LANG_COLORS[node.language] || LANG_COLORS.default
-
-      // Find angle that minimizes overlap with already-placed nodes
-      let bestAngle = (2 * Math.PI * i) / sorted.length
-      let bestOverlap = Infinity
-
-      for (let attempt = 0; attempt < 12; attempt++) {
-        const angle = attempt === 0
-          ? (2 * Math.PI * i) / sorted.length - Math.PI / 2
-          : ((2 * Math.PI * i) / sorted.length + (Math.random() * 0.6 - 0.3)) - Math.PI / 2
-        const testX = CX + targetR * Math.cos(angle)
-        const testY = CY + targetR * Math.sin(angle)
-        let maxOverlap = 0
-        for (const p of placed) {
-          const dx = testX - p.x
-          const dy = testY - p.y
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          const overlap = (size + p.r + 14) - dist
-          if (overlap > maxOverlap) maxOverlap = overlap
-        }
-        if (maxOverlap < bestOverlap) {
-          bestOverlap = maxOverlap
-          bestAngle = angle
-        }
-        if (maxOverlap <= 0) break
-      }
+    for (let i = 0; i < sorted.length; i++) {
+      const node = sorted[i]
+      // Higher-ranked nodes tend to be closer to center, but with strong jitter
+      const rankFrac = i / Math.max(sorted.length - 1, 1)
+      // Use sqrt to push more nodes toward midrange (natural density falloff)
+      const baseR = startR + Math.sqrt(rankFrac) * (maxR - startR)
+      // Wide jitter band — radius varies by ±35%
+      const jitterR = baseR * (0.7 + rand() * 0.6)
+      const clampedR = Math.max(startR, Math.min(maxR, jitterR))
+      // Golden-angle spiral + random jitter
+      const angle = i * goldenAngle + (rand() * 1.2 - 0.6)
 
       placed.push({
         ...node,
-        x: CX + targetR * Math.cos(bestAngle),
-        y: CY + targetR * Math.sin(bestAngle),
-        r: size,
-        color
+        x: CX + clampedR * Math.cos(angle),
+        y: CY + clampedR * Math.sin(angle),
+        r: NODE_R,
+        color: LANG_COLORS[node.language] || LANG_COLORS.default,
+        ring: 0
       })
-    })
+    }
 
-    setPositions(placed)
+    // Collision resolution — push apart overlapping nodes
+    for (let iter = 0; iter < 20; iter++) {
+      for (let i = 0; i < placed.length; i++) {
+        for (let j = i + 1; j < placed.length; j++) {
+          const dx = placed[j].x - placed[i].x
+          const dy = placed[j].y - placed[i].y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < minDist && dist > 0.001) {
+            const push = (minDist - dist) / 2
+            const nx = dx / dist
+            const ny = dy / dist
+            placed[i].x -= nx * push
+            placed[i].y -= ny * push
+            placed[j].x += nx * push
+            placed[j].y += ny * push
+          }
+        }
+        // Keep within bounds
+        placed[i].x = Math.max(NODE_R + 4, Math.min(CX * 2 - NODE_R - 4, placed[i].x))
+        placed[i].y = Math.max(NODE_R + 4, Math.min(CY * 2 - NODE_R - 4, placed[i].y))
+        // Also keep out of the avatar zone
+        const dxc = placed[i].x - CX
+        const dyc = placed[i].y - CY
+        const dc = Math.sqrt(dxc * dxc + dyc * dyc)
+        if (dc < startR && dc > 0.001) {
+          placed[i].x = CX + (dxc / dc) * startR
+          placed[i].y = CY + (dyc / dc) * startR
+        }
+      }
+    }
+
+    return placed
   }, [nodes, metric])
-
-  // Intro animation
-  useEffect(() => {
-    let start: number | null = null
-    const animate = (ts: number) => {
-      if (!start) start = ts
-      setAnimationPhase(Math.min((ts - start) / 800, 1))
-      if (ts - start < 800) animFrame.current = requestAnimationFrame(animate)
-    }
-    animFrame.current = requestAnimationFrame(animate)
-    return () => cancelAnimationFrame(animFrame.current)
-  }, [positions])
-
-  // Generate background particles
-  const particles = useMemo(() => {
-    const pts: { x: number; y: number; r: number; opacity: number; delay: number }[] = []
-    for (let i = 0; i < 80; i++) {
-      const seed = (i * 7919 + 137)
-      const angle = ((seed % 6283) / 1000)
-      const dist = 80 + (seed % 240)
-      pts.push({
-        x: CX + dist * Math.cos(angle),
-        y: CY + dist * Math.sin(angle),
-        r: 0.5 + (seed % 20) * 0.1,
-        opacity: 0.1 + (seed % 5) * 0.04,
-        delay: (seed % 3000) / 1000
-      })
-    }
-    return pts
-  }, [])
 
   const handleNodeHover = useCallback((node: PositionedNode | null, e?: React.MouseEvent) => {
     if (!node || !e) {
@@ -165,10 +151,8 @@ export default function NetworkGraph({ repoStats, repos, username, lang }: Props
 
   if (nodes.length === 0) return null
 
-  const maxMetric = Math.max(...nodes.map(n => metric === 'commits' ? n.commits : n.stars), 1)
-
   return (
-    <div className="chart-container" style={{ overflow: 'hidden' }}>
+    <div className="chart-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <h3>{t('networkGraph', lang)}</h3>
         <div className="lang-switch">
@@ -181,118 +165,41 @@ export default function NetworkGraph({ repoStats, repos, username, lang }: Props
 
       <div style={{ position: 'relative' }}>
         <svg viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`}
-          style={{ width: '100%', maxHeight: 560, cursor: 'default' }}>
+          style={{ width: '100%', maxHeight: 700, cursor: 'default' }}>
 
           <defs>
-            {/* Glow filters */}
-            <filter id="kgGlow" x="-60%" y="-60%" width="220%" height="220%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
+            <filter id="ngGlow">
+              <feGaussianBlur stdDeviation="3" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
-            <filter id="kgGlowStrong" x="-80%" y="-80%" width="260%" height="260%">
-              <feGaussianBlur stdDeviation="8" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
-
-            {/* Center aurora gradients */}
-            <radialGradient id="kgAura1" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#1f6feb" stopOpacity={0.12} />
+            <radialGradient id="ngAura" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#1f6feb" stopOpacity={0.1} />
               <stop offset="70%" stopColor="#1f6feb" stopOpacity={0.02} />
               <stop offset="100%" stopColor="#1f6feb" stopOpacity={0} />
             </radialGradient>
-            <radialGradient id="kgAura2" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#58a6ff" stopOpacity={0.18} />
-              <stop offset="50%" stopColor="#58a6ff" stopOpacity={0.04} />
-              <stop offset="100%" stopColor="#58a6ff" stopOpacity={0} />
-            </radialGradient>
-
-            {/* Line gradients - created per edge for color transitions */}
-            {positions.map((node, i) => (
-              <linearGradient key={`ge-${i}`} id={`kgEdge-${i}`} x1="0%" y1="0%" x2="100%" y2="0"
-                gradientUnits="userSpaceOnUse"
-                gradientTransform={`rotate(${Math.atan2(node.y - CY, node.x - CX) * 180 / Math.PI} ${CX} ${CY})`}>
-                <stop offset="0%" stopColor="#58a6ff" stopOpacity={0.25} />
-                <stop offset="100%" stopColor={node.color} stopOpacity={0.45} />
-              </linearGradient>
-            ))}
-            {positions.map((node, i) => (
-              <radialGradient key={`gn-${i}`} id={`kgNodeGlow-${i}`} cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor={node.color} stopOpacity={0.5} />
-                <stop offset="100%" stopColor={node.color} stopOpacity={0} />
-              </radialGradient>
-            ))}
-
-            <clipPath id="kgAvatarClip">
+            <clipPath id="ngAvatarClip">
               <circle cx={CX} cy={CY} r={CENTER_R} />
             </clipPath>
           </defs>
 
-          {/* Dark background */}
+          {/* Background */}
           <rect width={SVG_SIZE} height={SVG_SIZE} fill="transparent" />
 
-          {/* Center aurora */}
-          <circle cx={CX} cy={CY} r={200} fill="url(#kgAura1)" />
-          <circle cx={CX} cy={CY} r={100} fill="url(#kgAura2)" />
+          {/* Center aura */}
+          <circle cx={CX} cy={CY} r={180} fill="url(#ngAura)" />
 
-          {/* Decorative orbit rings */}
-          <circle cx={CX} cy={CY} r={175} fill="none" stroke="#1f6feb" strokeWidth={0.3}
-            strokeDasharray="2 8" opacity={0.15} />
-          <circle cx={CX} cy={CY} r={220} fill="none" stroke="#30363d" strokeWidth={0.3}
-            strokeDasharray="1 6" opacity={0.12} />
-
-          {/* Background particles */}
-          {particles.map((p, i) => (
-            <circle key={`pt-${i}`} cx={p.x} cy={p.y} r={p.r}
-              fill="#8b949e" opacity={p.opacity * animationPhase}>
-              <animate attributeName="opacity"
-                values={`${p.opacity * 0.5};${p.opacity * 1.5};${p.opacity * 0.5}`}
-                dur={`${2.5 + (i % 5) * 0.4}s`} begin={`${p.delay}s`} repeatCount="indefinite" />
-            </circle>
-          ))}
-
-          {/* Edges - curved lines from center to each node */}
-          {positions.map((node, i) => {
-            const isHovered = hoveredNode === node.fullName
-            const faded = hoveredNode !== null && !isHovered
-            // Compute bezier control point for curve
-            const dx = node.x - CX
-            const dy = node.y - CY
-            const dist = Math.sqrt(dx * dx + dy * dy)
-            const perpX = -dy / dist * dist * 0.15
-            const perpY = dx / dist * dist * 0.15
-            const midX = CX + dx / 2
-            const midY = CY + dy / 2
-            return (
-              <g key={`edge-${i}`} opacity={faded ? 0.12 : 1} style={{ transition: 'opacity 0.4s ease' }}>
-                {/* Thin shadow line */}
-                <path
-                  d={`M ${CX} ${CY} Q ${midX + perpX} ${midY + perpY} ${node.x} ${node.y}`}
-                  fill="none" stroke="#0d1117" strokeWidth={isHovered ? 5 : 2.5}
-                  strokeLinecap="round" opacity={0.4}
-                />
-                {/* Main colored line */}
-                <path
-                  d={`M ${CX} ${CY} Q ${midX + perpX} ${midY + perpY} ${node.x} ${node.y}`}
-                  fill="none"
-                  stroke={isHovered ? node.color : `url(#kgEdge-${i})`}
-                  strokeWidth={isHovered ? 2.2 : 1}
-                  strokeLinecap="round"
-                  style={{ transition: 'all 0.4s ease' }}
-                />
-              </g>
-            )
-          })}
-
-          {/* Node glow circles (behind main nodes) */}
+          {/* Edges */}
           {positions.map((node, i) => {
             const isHovered = hoveredNode === node.fullName
             const faded = hoveredNode !== null && !isHovered
             return (
-              <circle key={`nglow-${i}`} cx={node.x} cy={node.y}
-                r={isHovered ? node.r * 2.5 : node.r * 1.6}
-                fill={`url(#kgNodeGlow-${i})`}
-                opacity={faded ? 0.15 : 1}
-                style={{ transition: 'all 0.4s ease' }} />
+              <line key={`edge-${i}`}
+                x1={CX} y1={CY} x2={node.x} y2={node.y}
+                stroke={isHovered ? node.color : '#484f58'}
+                strokeWidth={isHovered ? 1.4 : 0.6}
+                opacity={faded ? 0.06 : isHovered ? 0.8 : 0.2}
+                style={{ transition: 'all 0.3s ease' }}
+              />
             )
           })}
 
@@ -302,153 +209,105 @@ export default function NetworkGraph({ repoStats, repos, username, lang }: Props
             const faded = hoveredNode !== null && !isHovered
             return (
               <g key={`node-${i}`}
-                opacity={faded ? 0.3 : 1}
-                style={{ cursor: 'pointer', transition: 'opacity 0.4s ease' }}
+                opacity={faded ? 0.25 : 1}
+                style={{ cursor: 'pointer', transition: 'opacity 0.3s ease' }}
                 onClick={() => window.api.openExternal(`https://github.com/${node.fullName}`)}
                 onMouseEnter={(e) => handleNodeHover(node, e as any)}
                 onMouseLeave={() => handleNodeHover(null)}>
 
-                {/* Pulsing ring on hover */}
+                {/* Hover ring */}
                 {isHovered && (
-                  <circle cx={node.x} cy={node.y} r={node.r + 5} fill="none"
-                    stroke={node.color} strokeWidth={1.5} opacity={0.6}>
-                    <animate attributeName="r" from={node.r + 3} to={node.r + 16}
-                      dur="1.4s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" from="0.5" to="0"
-                      dur="1.4s" repeatCount="indefinite" />
-                  </circle>
+                  <circle cx={node.x} cy={node.y} r={NODE_R + 5} fill="none"
+                    stroke={node.color} strokeWidth={1.2} opacity={0.5} />
                 )}
 
-                {/* Main node disc */}
-                <circle cx={node.x} cy={node.y} r={node.r}
-                  fill={node.color} opacity={0.88}
-                  stroke="#0d1117" strokeWidth={isHovered ? 3 : 2}
-                  filter={isHovered ? 'url(#kgGlowStrong)' : 'url(#kgGlow)'}
-                  style={{ transition: 'all 0.3s ease' }} />
+                {/* Glow underneath */}
+                <circle cx={node.x} cy={node.y} r={NODE_R + 4}
+                  fill={node.color} opacity={isHovered ? 0.35 : 0.18}
+                  style={{ transition: 'all 0.2s ease' }} />
+                {/* Main dot */}
+                <circle cx={node.x} cy={node.y} r={NODE_R}
+                  fill={node.color} opacity={1}
+                  stroke="rgba(255,255,255,0.2)" strokeWidth={1}
+                  style={{ transition: 'all 0.2s ease' }} />
 
-                {/* Specular highlight */}
-                <ellipse cx={node.x - node.r * 0.28} cy={node.y - node.r * 0.28}
-                  rx={node.r * 0.38} ry={node.r * 0.28}
-                  fill="white" opacity={0.18}
-                  style={{ transition: 'all 0.3s ease' }} />
-
-                {/* Node label */}
-                <text x={node.x} y={node.y + node.r + 15}
+                {/* Label */}
+                <text x={node.x} y={node.y + NODE_R + 14}
                   textAnchor="middle"
                   fill={isHovered ? '#f0f6fc' : '#8b949e'}
-                  fontSize={isHovered ? 13 : 10.5}
+                  fontSize={isHovered ? 12 : 10}
                   fontWeight={isHovered ? 600 : 400}
                   fontFamily="-apple-system, BlinkMacSystemFont, sans-serif"
-                  style={{ transition: 'all 0.3s ease' }}>
-                  {node.name.length > 15 ? node.name.slice(0, 13) + '..' : node.name}
+                  style={{ transition: 'all 0.2s ease' }}>
+                  {node.name.length > 14 ? node.name.slice(0, 12) + '..' : node.name}
                 </text>
               </g>
             )
           })}
 
-          {/* ===== CENTER: User avatar with decoration ===== */}
-          {/* Outer decorative ring with orbit dots */}
-          <circle cx={CX} cy={CY} r={CENTER_R + 16} fill="none"
-            stroke="#1f6feb" strokeWidth={0.5} opacity={0.2} />
-          <circle cx={CX} cy={CY} r={CENTER_R + 10} fill="none"
-            stroke="#58a6ff" strokeWidth={0.8} opacity={0.18} />
-
-          {/* Rotating orbit dot */}
-          <g>
-            <animateTransform attributeName="transform" type="rotate"
-              from={`0 ${CX} ${CY}`} to={`360 ${CX} ${CY}`}
-              dur="12s" repeatCount="indefinite" />
-            <circle cx={CX} cy={CY - CENTER_R - 10} r={3}
-              fill="#58a6ff" opacity={0.7} filter="url(#kgGlow)" />
-          </g>
-          <g>
-            <animateTransform attributeName="transform" type="rotate"
-              from={`120 ${CX} ${CY}`} to={`480 ${CX} ${CY}`}
-              dur="8s" repeatCount="indefinite" />
-            <circle cx={CX} cy={CY - CENTER_R - 10} r={2}
-              fill="#1f6feb" opacity={0.5} />
-          </g>
-
-          {/* Avatar border */}
-          <circle cx={CX} cy={CY} r={CENTER_R + 5} fill="#0d1117" />
-          <circle cx={CX} cy={CY} r={CENTER_R + 5} fill="none"
-            stroke="#21262d" strokeWidth={2} />
-
-          {/* Avatar image */}
+          {/* Center avatar */}
+          <circle cx={CX} cy={CY} r={CENTER_R + 4} fill="#0d1117" />
+          <circle cx={CX} cy={CY} r={CENTER_R + 4} fill="none" stroke="#21262d" strokeWidth={1.5} />
           <image href={`https://github.com/${username}.png`}
             x={CX - CENTER_R} y={CY - CENTER_R}
             width={CENTER_R * 2} height={CENTER_R * 2}
-            clipPath="url(#kgAvatarClip)"
+            clipPath="url(#ngAvatarClip)"
             preserveAspectRatio="xMidYMid slice" />
-
-          {/* Avatar ring glow */}
           <circle cx={CX} cy={CY} r={CENTER_R} fill="none"
-            stroke="#1f6feb" strokeWidth={2.5} opacity={0.75}
-            filter="url(#kgGlow)" />
+            stroke="#1f6feb" strokeWidth={2} opacity={0.7} filter="url(#ngGlow)" />
 
-          {/* Count badge above avatar */}
-          <rect x={CX - 22} y={CY - CENTER_R - 22} width={44} height={22} rx={11}
-            fill="#161b22" stroke="#1f6feb" strokeWidth={1} opacity={0.9} />
+          {/* Repo count badge */}
+          <rect x={CX - 18} y={CY - CENTER_R - 20} width={36} height={18} rx={9}
+            fill="#161b22" stroke="#30363d" strokeWidth={1} />
           <text x={CX} y={CY - CENTER_R - 7}
-            textAnchor="middle" fill="#58a6ff" fontSize={12} fontWeight={700}
+            textAnchor="middle" fill="#8b949e" fontSize={11} fontWeight={600}
             fontFamily="-apple-system, BlinkMacSystemFont, sans-serif">
             {nodes.length}
           </text>
 
           {/* Username */}
-          <text x={CX} y={CY + CENTER_R + 30}
-            textAnchor="middle" fill="#f0f6fc" fontSize={14} fontWeight={700}
+          <text x={CX} y={CY + CENTER_R + 26}
+            textAnchor="middle" fill="#f0f6fc" fontSize={13} fontWeight={700}
             fontFamily="-apple-system, BlinkMacSystemFont, sans-serif">
             {username}
           </text>
         </svg>
 
-        {/* Tooltip popup */}
+        {/* Tooltip */}
         {tooltip && (
           <div style={{
             position: 'absolute',
-            left: Math.min(tooltip.x - 100, SVG_SIZE - 220),
-            top: Math.max(8, tooltip.y - tooltip.node.r - 80),
-            width: 200,
-            background: 'rgba(22, 27, 34, 0.95)',
-            backdropFilter: 'blur(12px)',
+            left: Math.min(tooltip.x - 90, SVG_SIZE - 200),
+            top: Math.max(8, tooltip.y - NODE_R - 75),
+            width: 180,
+            background: 'rgba(22, 27, 34, 0.96)',
             border: `1px solid ${tooltip.node.color}44`,
-            borderRadius: 10,
-            padding: '10px 14px',
+            borderRadius: 8,
+            padding: '8px 12px',
             fontSize: 12,
             color: '#c9d1d9',
             pointerEvents: 'none',
             zIndex: 1000,
-            boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 20px ${tooltip.node.color}15`,
+            boxShadow: '0 6px 24px rgba(0,0,0,0.5)',
             textAlign: 'center'
           }}>
-            <div style={{ fontWeight: 600, color: '#f0f6fc', marginBottom: 6, fontSize: 13,
+            <div style={{ fontWeight: 600, color: '#f0f6fc', marginBottom: 4, fontSize: 12,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {tooltip.node.owner}/{tooltip.node.name}
+              {tooltip.node.name}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
               <span>★ <strong style={{ color: '#d29922' }}>{tooltip.node.stars.toLocaleString()}</strong></span>
-              <span>⬤ <strong style={{ color: '#f0f6fc' }}>{tooltip.node.commits}</strong> commits</span>
+              <span style={{ color: '#8b949e' }}>{tooltip.node.commits} commits</span>
             </div>
             {tooltip.node.language && (
-              <span style={{ fontSize: 11, color: '#8b949e' }}>
-                <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
-                  background: tooltip.node.color, marginRight: 5 }} />
+              <div style={{ fontSize: 11, color: '#8b949e', marginTop: 2 }}>
+                <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+                  background: tooltip.node.color, marginRight: 4, verticalAlign: 'middle' }} />
                 {tooltip.node.language}
-              </span>
+              </div>
             )}
           </div>
         )}
-      </div>
-
-      {/* Legend */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 4, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, color: '#8b949e' }}>
-          {t('closerMeansMore', lang)}
-        </span>
-        <span style={{ fontSize: 11, color: '#8b949e' }}>
-          {t('nodeSize', lang)}
-        </span>
       </div>
     </div>
   )

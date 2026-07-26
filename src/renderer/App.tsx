@@ -3,8 +3,7 @@ import RepoInput from './components/RepoInput'
 import RepoSelector from './components/RepoSelector'
 import TimeRangeSelector from './components/TimeRangeSelector'
 import StatsCards from './components/StatsCards'
-import DailyTable from './components/DailyTable'
-import CommitCharts from './components/CommitCharts'
+import ContributionGraph from './components/ContributionGraph'
 import AnalysisPanel from './components/AnalysisPanel'
 import CommitList from './components/CommitList'
 import NetworkGraph from './components/NetworkGraph'
@@ -40,6 +39,7 @@ export default function App() {
   const autoFetched = useRef(false)
   const [detecting, setDetecting] = useState(false)
   const statsCache = useRef<Map<string, OverallStats>>(new Map())
+  const prefetchedRef = useRef<Set<string>>(new Set())
 
   const changeLang = (l: Lang) => {
     setLang(l)
@@ -71,14 +71,51 @@ export default function App() {
     })
   }, [])
 
+  const getCacheKey = (sel: Set<number>, range: TimeRange) =>
+    `${[...sel].sort().join(',')}|${JSON.stringify(range)}`
+
+  const prefetchOtherRanges = async (reposList: RepoInfo[], sel: Set<number>, currentRange: TimeRange) => {
+    const selectedRepos = reposList.filter((r) => sel.has(r.id))
+    if (selectedRepos.length === 0) return
+
+    // Only pre-fetch the 2 most useful presets to conserve API quota
+    const presets: TimeRange[] = [
+      { preset: 'all' },
+      { preset: 'this-year' }
+    ]
+
+    const currentKey = JSON.stringify(currentRange)
+
+    // Fetch sequentially (not parallel) to avoid hammering the API
+    for (const range of presets) {
+      const rangeKey = JSON.stringify(range)
+      if (rangeKey === currentKey) continue
+      const cacheKey = getCacheKey(sel, range)
+      if (prefetchedRef.current.has(cacheKey)) continue
+
+      prefetchedRef.current.add(cacheKey)
+      const { since, until } = timeRangeToParams(range)
+
+      try {
+        const result = await window.api.fetchAllStats({
+          username,
+          repos: selectedRepos.map((r) => ({ owner: r.owner, name: r.name })),
+          token: token || undefined,
+          since,
+          until
+        })
+        statsCache.current.set(cacheKey, result)
+      } catch {
+        prefetchedRef.current.delete(cacheKey)
+      }
+    }
+  }
+
   const doAnalyze = async (reposList: RepoInfo[], sel: Set<number>, range: TimeRange) => {
     const selectedRepos = reposList.filter((r) => sel.has(r.id))
     if (selectedRepos.length === 0) return
 
-    // Build a key from the selected repos and time range — if already analyzed, reuse cached result
-    const repoKey = [...sel].sort().join(',')
-    const rangeKey = JSON.stringify(range)
-    const cacheKey = `${repoKey}|${rangeKey}`
+    const cacheKey = getCacheKey(sel, range)
 
     const cached = statsCache.current.get(cacheKey)
     if (cached) {
@@ -92,7 +129,7 @@ export default function App() {
     setStats(null)
 
     const { since, until } = timeRangeToParams(range)
-    console.log(`[doAnalyze] range=${rangeKey}, since=${since}, until=${until}`)
+    console.log(`[doAnalyze] range=${JSON.stringify(range)}, since=${since}, until=${until}`)
 
     try {
       const result = await window.api.fetchAllStats({
@@ -105,6 +142,9 @@ export default function App() {
       statsCache.current.set(cacheKey, result)
       setStats(result)
       setPhase('results')
+
+      // Pre-fetch other preset ranges in background so tab switching is instant
+      prefetchOtherRanges(reposList, sel, range)
     } catch (e: any) {
       if (e.message?.includes('401') || e.message?.includes('403')) {
         setError(t('rateLimit', lang))
@@ -134,6 +174,7 @@ export default function App() {
       setPhase('select')
       setStats(null)
       statsCache.current.clear()
+      prefetchedRef.current.clear()
       saved.current = { username: name, token: tkn }
     } catch (e: any) {
       if (e.message?.includes('404') || e.message?.includes('Not Found')) {
@@ -150,6 +191,7 @@ export default function App() {
 
   const toggleRepo = (id: number) => {
     statsCache.current.clear()
+    prefetchedRef.current.clear()
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -160,12 +202,14 @@ export default function App() {
 
   const handleForceRefresh = async () => {
     statsCache.current.clear()
+    prefetchedRef.current.clear()
     await window.api.clearCache({ username })
     doAnalyze(repos, selected, timeRange)
   }
 
   const handleBack = () => {
     statsCache.current.clear()
+    prefetchedRef.current.clear()
     setPhase('input')
     setRepos([])
     setStats(null)
@@ -267,7 +311,6 @@ export default function App() {
             </div>
           </div>
           <StatsCards stats={stats} lang={lang} />
-          <CommitCharts dailyStats={stats.dailyStats} lang={lang} />
           <NetworkGraph
             repoStats={stats.repoStats}
             repos={repos}
@@ -276,7 +319,7 @@ export default function App() {
           />
           <AnalysisPanel stats={stats} lang={lang} />
           <CommitList commits={stats.recentCommits} lang={lang} />
-          <DailyTable dailyStats={stats.dailyStats} lang={lang} />
+          <ContributionGraph dailyStats={stats.dailyStats} lang={lang} since={timeRangeToParams(timeRange).since} until={timeRangeToParams(timeRange).until} />
         </>
       )}
     </div>
