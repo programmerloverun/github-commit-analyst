@@ -8,15 +8,15 @@ import com.intellij.util.ui.JBUI
 import java.awt.*
 import javax.swing.*
 
-class CommitAnalystPanel(private val project: Project) : JBPanel<CommitAnalystPanel>(BorderLayout()) {
+class CommitAnalystPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private val api = GitHubApi()
     private val usernameField = JBTextField()
     private val tokenField = JBPasswordField()
     private val fetchBtn = JButton("Fetch Repos")
     private val analyzeBtn = JButton("Analyze")
-    private val repoPanel = JBPanel<JBPanel<*>>(BoxLayout.Y_AXIS).apply { isVisible = false }
-    private val resultPanel = JBPanel<JBPanel<*>>(BoxLayout.Y_AXIS).apply { isVisible = false }
+    private val repoPanel = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS); isVisible = false }
+    private val resultPanel = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS); isVisible = false }
     private val statusLabel = JBLabel("", SwingConstants.CENTER)
 
     private var repos = listOf<RepoInfo>()
@@ -28,7 +28,7 @@ class CommitAnalystPanel(private val project: Project) : JBPanel<CommitAnalystPa
     }
 
     private fun buildInputPanel() {
-        val panel = JBPanel<JBPanel<*>>(GridBagLayout())
+        val panel = JPanel(GridBagLayout())
         val gbc = GridBagConstraints().apply { fill = GridBagConstraints.HORIZONTAL; insets = JBUI.insets(4, 0) }
 
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2
@@ -95,9 +95,9 @@ class CommitAnalystPanel(private val project: Project) : JBPanel<CommitAnalystPa
         repoPanel.removeAll()
         repoPanel.isVisible = true
 
-        val scroll = JBScrollPane(repoPanel).apply {
-            preferredSize = Dimension(0, 300)
-            border = JBUI.Borders.empty()
+        val scroll = JBScrollPane(repoPanel).also {
+            it.preferredSize = Dimension(0, 300)
+            it.border = JBUI.Borders.empty()
         }
 
         for (repo in repos) {
@@ -114,17 +114,12 @@ class CommitAnalystPanel(private val project: Project) : JBPanel<CommitAnalystPa
         analyzeBtn.text = "Analyze (${selected.size})"
         analyzeBtn.addActionListener { runAnalysis() }
 
-        val btnPanel = JBPanel<JBPanel<*>>(FlowLayout(FlowLayout.RIGHT))
+        val btnPanel = JPanel(FlowLayout(FlowLayout.RIGHT))
         btnPanel.add(analyzeBtn)
         repoPanel.add(btnPanel)
         repoPanel.revalidate()
         repoPanel.repaint()
 
-        // Re-attach scroll pane
-        val parent = repoPanel.parent
-        if (parent is JBPanel<*>) {
-            // Add scroll at correct position
-        }
         add(scroll, BorderLayout.CENTER)
         revalidate()
         repaint()
