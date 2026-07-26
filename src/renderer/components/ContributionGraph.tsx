@@ -43,7 +43,8 @@ export default function ContributionGraph({ dailyStats, lang, since, until }: Pr
     const rangeEnd = until || todayStr
 
     // Start from the Sunday before the range start
-    const start = new Date(rangeStart + 'T00:00:00')
+    const rangeStartDate = new Date(rangeStart + 'T00:00:00')
+    const start = new Date(rangeStartDate)
     start.setDate(start.getDate() - start.getDay())
 
     // End on the Saturday after the range end (or today, whichever is earlier)
@@ -64,18 +65,19 @@ export default function ContributionGraph({ dailyStats, lang, since, until }: Pr
       cols.push(week)
     }
 
-    // Month labels: position at first week that contains a day from the month
+    // Month labels: only include months that overlap with the actual range
     const ml: { label: string; col: number }[] = []
     const monthNames = lang === 'zh' ? MONTH_LABELS_ZH : MONTH_LABELS_EN
+    const firstMonth = rangeStartDate.getFullYear() * 12 + rangeStartDate.getMonth()
+    const lastMonth = rangeEndDate.getFullYear() * 12 + rangeEndDate.getMonth()
     for (let i = 0; i < cols.length; i++) {
       const week = cols[i]
       for (const day of week) {
-        if (day.date.getDate() === 1 || (i === 0 && day.date.getDate() <= 7)) {
-          const label = monthNames[day.date.getMonth()]
-          // Only add if this month hasn't been added yet
-          if (!ml.length || ml[ml.length - 1].label !== label) {
-            ml.push({ label, col: i })
-          }
+        const dayMonth = day.date.getFullYear() * 12 + day.date.getMonth()
+        if (dayMonth < firstMonth || dayMonth > lastMonth) continue
+        const label = monthNames[day.date.getMonth()]
+        if (!ml.length || ml[ml.length - 1].label !== label) {
+          ml.push({ label, col: i })
         }
       }
     }
