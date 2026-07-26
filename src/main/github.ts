@@ -244,19 +244,40 @@ async function searchContributedRepos(
         owner: r.owner,
         repo: r.name
       })
-      // For forks, use the parent (upstream) repo
-      const upstream = fullRepo.parent ?? fullRepo.source ?? fullRepo
+      // For forks, resolve to the upstream parent — otherwise the same commits
+      // get counted in every fork, inflating stats. Skip forks without a parent.
+      if (fullRepo.fork) {
+        if (!fullRepo.parent) return null
+        // Use the parent repo's data (stars, description, etc.)
+        const { data: parent } = await octokit.rest.repos.get({
+          owner: fullRepo.parent.owner.login,
+          repo: fullRepo.parent.name
+        })
+        return {
+          id: parent.id,
+          owner: parent.owner.login,
+          name: parent.name,
+          fullName: parent.full_name,
+          stars: parent.stargazers_count ?? 0,
+          language: parent.language ?? '',
+          description: parent.description ?? '',
+          isPrivate: parent.private ?? false,
+          source: 'contributed' as const,
+          updatedAt: parent.updated_at ?? ''
+        }
+      }
+      // Non-fork repos: use as-is
       return {
-        id: upstream.id,
-        owner: upstream.owner.login,
-        name: upstream.name,
-        fullName: upstream.full_name,
-        stars: upstream.stargazers_count ?? 0,
-        language: upstream.language ?? '',
-        description: upstream.description ?? '',
-        isPrivate: upstream.private ?? false,
+        id: fullRepo.id,
+        owner: fullRepo.owner.login,
+        name: fullRepo.name,
+        fullName: fullRepo.full_name,
+        stars: fullRepo.stargazers_count ?? 0,
+        language: fullRepo.language ?? '',
+        description: fullRepo.description ?? '',
+        isPrivate: fullRepo.private ?? false,
         source: 'contributed' as const,
-        updatedAt: upstream.updated_at ?? ''
+        updatedAt: fullRepo.updated_at ?? ''
       }
     } catch {
       return null
