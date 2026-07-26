@@ -13,16 +13,16 @@
 ### macOS 侧边栏工具
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/programmerloverun/github-commit-analyst/main/docs/images/sidebar-overview.png" width="32%" alt="主界面" />
-  <img src="https://raw.githubusercontent.com/programmerloverun/github-commit-analyst/main/docs/images/sidebar-repos.png" width="32%" alt="仓库选择" />
-  <img src="https://raw.githubusercontent.com/programmerloverun/github-commit-analyst/main/docs/images/sidebar-stats.png" width="32%" alt="分析结果" />
+  <img src="docs/images/sidebar-overview.png" width="32%" alt="主界面" />
+  <img src="docs/images/sidebar-repos.png" width="32%" alt="仓库选择" />
+  <img src="docs/images/sidebar-stats.png" width="32%" alt="分析结果" />
 </p>
 
 ### VS Code 插件
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/programmerloverun/github-commit-analyst/main/docs/images/vscode-main.png" width="48%" alt="主界面" />
-  <img src="https://raw.githubusercontent.com/programmerloverun/github-commit-analyst/main/docs/images/vscode-stats.png" width="48%" alt="分析结果" />
+  <img src="docs/images/vscode-main.png" width="48%" alt="主界面" />
+  <img src="docs/images/vscode-stats.png" width="48%" alt="分析结果" />
 </p>
 
 ## 功能
