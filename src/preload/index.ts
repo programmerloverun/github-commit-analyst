@@ -11,7 +11,11 @@ const api = {
   clearCache: (params: { username: string }) =>
     ipcRenderer.invoke('clear-cache', params) as Promise<void>,
   openExternal: (url: string) =>
-    ipcRenderer.invoke('open-external', url)
+    ipcRenderer.invoke('open-external', url),
+  toggleSidebar: () =>
+    ipcRenderer.invoke('toggle-sidebar') as Promise<void>,
+  quitApp: () =>
+    ipcRenderer.invoke('quit-app') as Promise<void>
 }
 
 contextBridge.exposeInMainWorld('api', api)

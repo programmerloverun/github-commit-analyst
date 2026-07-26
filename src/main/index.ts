@@ -1,9 +1,14 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, screen, globalShortcut } from 'electron'
 import { join } from 'path'
 import { execSync } from 'child_process'
 import { fetchUserRepos, fetchAllCommitStats, initCache, clearUserCache } from './github'
 
 let mainWindow: BrowserWindow | null = null
+let isHidden = false
+let hideTimer: ReturnType<typeof setInterval> | null = null
+
+const SIDEBAR_WIDTH = 380
+const TAB_WIDTH = 20
 
 function exec(cmd: string): string {
   try {
@@ -14,36 +19,97 @@ function exec(cmd: string): string {
 }
 
 function detectLocalAuth(): { username: string; token: string } {
-  // 1. Try gh CLI token (most reliable, handles SSH + HTTPS)
   const token = exec('gh auth token --hostname github.com 2>/dev/null')
-
-  // 2. Try github.user from git config
   let username = exec('git config --global github.user')
-
-  // 3. If we have a token but no username, ask GitHub who we are
   if (!username && token) {
     username = exec(`gh api user --jq .login 2>/dev/null`)
   }
-
-  // 4. Fall back to git user.name
   if (!username) {
     username = exec('git config --global user.name')
   }
-
   return { username, token }
 }
 
+function getSidebarBounds(hidden: boolean) {
+  const display = screen.getPrimaryDisplay()
+  const { width, height } = display.workAreaSize
+  const y = display.workArea.y
+  const x = hidden ? width - TAB_WIDTH : width - SIDEBAR_WIDTH
+  return { x, y, width: SIDEBAR_WIDTH, height }
+}
+
+function showSidebar() {
+  if (!mainWindow || !isHidden) return
+  isHidden = false
+  const { x, y } = getSidebarBounds(false)
+  mainWindow.setPosition(x, y, true)
+  mainWindow.focus()
+}
+
+function hideSidebar() {
+  if (!mainWindow || isHidden) return
+  isHidden = true
+  const { x, y } = getSidebarBounds(true)
+  mainWindow.setPosition(x, y, true)
+}
+
+function startEdgePoll() {
+  if (hideTimer) return
+  hideTimer = setInterval(() => {
+    if (!isHidden) return
+    const cursor = screen.getCursorScreenPoint()
+    const display = screen.getPrimaryDisplay()
+    const edge = display.workArea.x + display.workAreaSize.width
+    // Reveal when cursor is within 8px of the right edge
+    if (cursor.x >= edge - 8) {
+      showSidebar()
+    }
+  }, 300)
+}
+
+function stopEdgePoll() {
+  if (hideTimer) {
+    clearInterval(hideTimer)
+    hideTimer = null
+  }
+}
+
 function createWindow(): void {
+  const bounds = getSidebarBounds(false)
+
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    x: bounds.x,
+    y: bounds.y,
+    width: SIDEBAR_WIDTH,
+    height: bounds.height,
+    minWidth: SIDEBAR_WIDTH,
+    maxWidth: SIDEBAR_WIDTH,
+    frame: false,
+    hasShadow: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
     title: 'GitHub Commit Analyst',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
+  })
+
+  mainWindow.setVisibleOnAllWorkspaces(true)
+
+  mainWindow.on('blur', () => {
+    // Small delay to avoid hiding on accidental blur during interactions
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isFocused()) {
+        hideSidebar()
+        startEdgePoll()
+      }
+    }, 500)
+  })
+
+  mainWindow.on('focus', () => {
+    stopEdgePoll()
   })
 
   mainWindow.on('ready-to-show', () => {
@@ -60,6 +126,16 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+function registerShortcuts() {
+  globalShortcut.register('Cmd+Shift+G', () => {
+    if (isHidden) {
+      showSidebar()
+    } else {
+      hideSidebar()
+    }
+  })
 }
 
 ipcMain.handle('detect-auth', async () => {
@@ -83,11 +159,6 @@ ipcMain.handle(
   }
 )
 
-app.whenReady().then(() => {
-  initCache(app.getPath('userData'))
-  createWindow()
-})
-
 ipcMain.handle(
   'clear-cache',
   async (_event, { username }: { username: string }) => {
@@ -99,10 +170,37 @@ ipcMain.handle('open-external', async (_event, url: string) => {
   shell.openExternal(url)
 })
 
+ipcMain.handle('toggle-sidebar', async () => {
+  if (isHidden) {
+    showSidebar()
+  } else {
+    hideSidebar()
+  }
+})
+
+ipcMain.handle('quit-app', async () => {
+  app.quit()
+})
+
+app.whenReady().then(() => {
+  initCache(app.getPath('userData'))
+  createWindow()
+  registerShortcuts()
+  // Hide from macOS Dock — sidebar lives in the menu bar only
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.hide()
+  }
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+  stopEdgePoll()
 })
 
 app.on('activate', () => {

@@ -78,7 +78,6 @@ export default function App() {
     const selectedRepos = reposList.filter((r) => sel.has(r.id))
     if (selectedRepos.length === 0) return
 
-    // Only pre-fetch the 2 most useful presets to conserve API quota
     const presets: TimeRange[] = [
       { preset: 'all' },
       { preset: 'this-year' }
@@ -86,7 +85,6 @@ export default function App() {
 
     const currentKey = JSON.stringify(currentRange)
 
-    // Fetch sequentially (not parallel) to avoid hammering the API
     for (const range of presets) {
       const rangeKey = JSON.stringify(range)
       if (rangeKey === currentKey) continue
@@ -129,7 +127,6 @@ export default function App() {
     setStats(null)
 
     const { since, until } = timeRangeToParams(range)
-    console.log(`[doAnalyze] range=${JSON.stringify(range)}, since=${since}, until=${until}`)
 
     try {
       const result = await window.api.fetchAllStats({
@@ -143,7 +140,6 @@ export default function App() {
       setStats(result)
       setPhase('results')
 
-      // Pre-fetch other preset ranges in background so tab switching is instant
       prefetchOtherRanges(reposList, sel, range)
     } catch (e: any) {
       if (e.message?.includes('401') || e.message?.includes('403')) {
@@ -226,102 +222,103 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="header-top">
-          <div className="lang-switch">
-            <button
-              className={`lang-btn ${lang === 'en' ? 'active' : ''}`}
-              onClick={() => changeLang('en')}
-            >EN</button>
-            <button
-              className={`lang-btn ${lang === 'zh' ? 'active' : ''}`}
-              onClick={() => changeLang('zh')}
-            >中文</button>
-          </div>
+      {/* Drag bar — compact top bar for window dragging */}
+      <div className="drag-bar">
+        <div className="drag-bar-left">
+          <button
+            className={`lang-btn ${lang === 'en' ? 'active' : ''}`}
+            onClick={() => changeLang('en')}
+          >EN</button>
+          <button
+            className={`lang-btn ${lang === 'zh' ? 'active' : ''}`}
+            onClick={() => changeLang('zh')}
+          >中文</button>
         </div>
-        <h1>{t('title', lang)}</h1>
-        <p>{t('subtitle', lang)}</p>
-        {username && phase !== 'input' && (
-          <button className="link-btn back-btn" onClick={handleBack}>
-            {t('back', lang)}
-          </button>
+        <div className="drag-bar-title">Commit Analyst</div>
+        <div className="drag-bar-right">
+          {phase !== 'input' && (
+            <button className="icon-btn" onClick={handleBack} title={t('back', lang)}>←</button>
+          )}
+          <button className="icon-btn quit-btn" onClick={() => window.api.quitApp()} title="Quit">✕</button>
+        </div>
+      </div>
+
+      <div className="app-content">
+        {phase === 'input' && (
+          <RepoInput
+            onFetchRepos={handleFetchRepos}
+            loading={loadingRepos}
+            initialUsername={username}
+            initialToken={token}
+            detecting={detecting}
+            lang={lang}
+          />
         )}
-      </header>
 
-      {phase === 'input' && (
-        <RepoInput
-          onFetchRepos={handleFetchRepos}
-          loading={loadingRepos}
-          initialUsername={username}
-          initialToken={token}
-          detecting={detecting}
-          lang={lang}
-        />
-      )}
+        {error && <div className="error-banner">{error}</div>}
 
-      {error && <div className="error-banner">{error}</div>}
-
-      {detecting && (
-        <div className="loading">
-          <div className="spinner" />
-          <p>{t('detecting', lang)}</p>
-        </div>
-      )}
-
-      {loadingRepos && (
-        <div className="loading">
-          <div className="spinner" />
-          <p>{t('fetchingReposFor', lang, { name: username })}</p>
-        </div>
-      )}
-
-      {phase === 'select' && repos.length > 0 && (
-        <>
-          <RepoSelector
-            repos={repos}
-            selected={selected}
-            onToggle={toggleRepo}
-            onSelectAll={() => setSelected(new Set(repos.map((r) => r.id)))}
-            onDeselectAll={() => setSelected(new Set())}
-            onAnalyze={() => doAnalyze(repos, selected, timeRange)}
-            onForceRefresh={handleForceRefresh}
-            loading={loading}
-            lang={lang}
-          />
-          <TimeRangeSelector value={timeRange} onChange={handleTimeRangeChange} lang={lang} />
-        </>
-      )}
-
-      {loading && (
-        <div className="loading">
-          <div className="spinner" />
-          <p>{t('fetchingStats', lang, { count: selected.size })}</p>
-        </div>
-      )}
-
-      {stats && (
-        <>
-          <div className="summary-bar">
-            {t('summary', lang, { username: stats.username, count: stats.repoCount })}
-            <div className="filter-range-display">
-              {t('filterRange', lang)}: {t('from', lang)} {timeRangeToParams(timeRange).since || t('beginning', lang)} {t('to', lang)} {timeRangeToParams(timeRange).until || t('now', lang)}
-            </div>
-            <div style={{ marginTop: 8 }}>
-              <TimeRangeSelector value={timeRange} onChange={handleTimeRangeChange} lang={lang} />
-            </div>
+        {detecting && (
+          <div className="loading">
+            <div className="spinner" />
+            <p>{t('detecting', lang)}</p>
           </div>
-          <StatsCards stats={stats} lang={lang} />
-          <NetworkGraph
-            repoStats={stats.repoStats}
-            repos={repos}
-            username={username}
-            lang={lang}
-          />
-          <AnalysisPanel stats={stats} lang={lang} />
-          <CommitList commits={stats.recentCommits} lang={lang} />
-          <ContributionGraph dailyStats={stats.dailyStats} lang={lang} since={timeRangeToParams(timeRange).since} until={timeRangeToParams(timeRange).until} />
-        </>
-      )}
+        )}
+
+        {loadingRepos && (
+          <div className="loading">
+            <div className="spinner" />
+            <p>{t('fetchingReposFor', lang, { name: username })}</p>
+          </div>
+        )}
+
+        {phase === 'select' && repos.length > 0 && (
+          <>
+            <RepoSelector
+              repos={repos}
+              selected={selected}
+              onToggle={toggleRepo}
+              onSelectAll={() => setSelected(new Set(repos.map((r) => r.id)))}
+              onDeselectAll={() => setSelected(new Set())}
+              onAnalyze={() => doAnalyze(repos, selected, timeRange)}
+              onForceRefresh={handleForceRefresh}
+              loading={loading}
+              lang={lang}
+            />
+            <TimeRangeSelector value={timeRange} onChange={handleTimeRangeChange} lang={lang} />
+          </>
+        )}
+
+        {loading && (
+          <div className="loading">
+            <div className="spinner" />
+            <p>{t('fetchingStats', lang, { count: selected.size })}</p>
+          </div>
+        )}
+
+        {stats && (
+          <>
+            <div className="summary-bar">
+              {t('summary', lang, { username: stats.username, count: stats.repoCount })}
+              <div className="filter-range-display">
+                {t('filterRange', lang)}: {t('from', lang)} {timeRangeToParams(timeRange).since || t('beginning', lang)} {t('to', lang)} {timeRangeToParams(timeRange).until || t('now', lang)}
+              </div>
+              <div style={{ marginTop: 4 }}>
+                <TimeRangeSelector value={timeRange} onChange={handleTimeRangeChange} lang={lang} />
+              </div>
+            </div>
+            <StatsCards stats={stats} lang={lang} />
+            <NetworkGraph
+              repoStats={stats.repoStats}
+              repos={repos}
+              username={username}
+              lang={lang}
+            />
+            <AnalysisPanel stats={stats} lang={lang} />
+            <CommitList commits={stats.recentCommits} lang={lang} />
+            <ContributionGraph dailyStats={stats.dailyStats} lang={lang} since={timeRangeToParams(timeRange).since} until={timeRangeToParams(timeRange).until} />
+          </>
+        )}
+      </div>
     </div>
   )
 }

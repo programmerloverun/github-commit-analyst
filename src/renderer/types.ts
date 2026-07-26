@@ -120,6 +120,8 @@ export interface Api {
   }) => Promise<OverallStats>
   clearCache: (params: { username: string }) => Promise<void>
   openExternal: (url: string) => Promise<void>
+  toggleSidebar: () => Promise<void>
+  quitApp: () => Promise<void>
 }
 
 declare global {
