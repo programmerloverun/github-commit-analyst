@@ -1,0 +1,102 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background: transparent;
+  padding: 0;
+}
+
+.panel {
+  padding: 12px;
+}
+
+h3 { font-size: 14px; margin-bottom: 6px; color: var(--vscode-foreground); }
+h4 { font-size: 12px; font-weight: 600; color: var(--vscode-descriptionForeground); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+
+.desc { font-size: 12px; color: var(--vscode-descriptionForeground); margin-bottom: 12px; }
+
+/* Bar */
+.bar {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px; gap: 6px;
+}
+.bar-actions { display: flex; gap: 4px; align-items: center; }
+.bar h3 { margin: 0; }
+
+/* Buttons */
+.btn {
+  padding: 7px 14px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none; border-radius: 4px; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s;
+}
+.btn:hover { background: var(--vscode-button-hoverBackground); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+.btn-back { margin-top: 8px; }
+
+/* Inputs */
+.input {
+  padding: 6px 10px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px; font-size: 12px; width: 100%; margin-top: 6px; outline: none;
+}
+.input:focus { border-color: var(--vscode-focusBorder); }
+
+.select {
+  padding: 4px 6px;
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  border: 1px solid var(--vscode-dropdown-border);
+  border-radius: 3px; font-size: 11px; outline: none;
+}
+
+.manual { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--vscode-sideBar-border); }
+
+/* Stats */
+.stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.stat {
+  background: var(--vscode-sideBar-background);
+  border: 1px solid var(--vscode-sideBar-border);
+  border-radius: 6px; padding: 10px; text-align: center;
+}
+.stat-v { font-size: 18px; font-weight: 700; display: block; }
+.stat-l { font-size: 10px; color: var(--vscode-descriptionForeground); text-transform: uppercase; letter-spacing: 0.03em; }
+.add { color: var(--vscode-charts-green); }
+.del { color: var(--vscode-charts-red); }
+
+/* Repo list */
+.repo-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
+.repo-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 4px; cursor: pointer;
+  background: var(--vscode-sideBar-background);
+  transition: background 0.1s; font-size: 12px;
+}
+.repo-row:hover { background: var(--vscode-list-hoverBackground); }
+.repo-row.sel { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+.repo-row input[type="checkbox"] { width: 13px; height: 13px; accent-color: var(--vscode-checkbox-border); }
+.repo-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.repo-stars { font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.repo-meta { font-size: 10px; color: var(--vscode-descriptionForeground); white-space: nowrap; }
+
+/* Commit list */
+.commit-list { display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto; }
+.commit-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;
+  background: var(--vscode-sideBar-background);
+}
+.commit-row:hover { background: var(--vscode-list-hoverBackground); }
+.commit-msg { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commit-date { font-size: 10px; color: var(--vscode-descriptionForeground); white-space: nowrap; }
+
+/* Loading / Error */
+.loading { text-align: center; padding: 24px; }
+.loading p { font-size: 12px; color: var(--vscode-descriptionForeground); }
+.err { color: var(--vscode-errorForeground); font-size: 12px; margin-bottom: 8px; }
