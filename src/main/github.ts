@@ -325,10 +325,11 @@ async function fetchRepoCommits(
 
     if (list.length === 0) break
 
-    // Filter out merge commits and commits without sha
-    const toFetch = list.filter((c: any) => c.sha && (!c.parents || c.parents.length <= 1))
+    const toFetch = list.filter((c: any) => c.sha)
 
-    // Fetch detailed stats concurrently (6 at a time) instead of one by one
+    console.log(`[fetchRepoCommits] ${repo.owner}/${repo.name} page=${page}: ${list.length} commits, ${toFetch.length} with sha, fetching details...`)
+
+    // Fetch detailed stats concurrently (6 at a time)
     const details = await runWithConcurrency(toFetch, async (c: any) => {
       try {
         const { data: detailed } = await octokit.rest.repos.getCommit({
@@ -341,6 +342,9 @@ async function fetchRepoCommits(
         return null
       }
     })
+
+    const succeeded = details.filter(Boolean).length
+    console.log(`[fetchRepoCommits] ${repo.owner}/${repo.name} page=${page}: ${succeeded}/${toFetch.length} details fetched`)
 
     for (const item of details) {
       if (!item) continue
