@@ -1,59 +1,51 @@
-# GitHub Commit Analyst
+# GitHub Commit Analyst — VS Code Extension
 
-Cross-platform desktop app to analyze GitHub commit history across all your repositories — including private repos and open-source contributions.
+在 VS Code 侧边栏中分析 GitHub 提交历史。通过 GitHub OAuth 一键登录。
 
-## Features
+## 功能
 
-- **Multi-repo analysis** — Analyze commits across all repositories you own or contribute to
-- **Incremental caching** — Only fetches new commits after the first run, 10x faster on subsequent analyses
-- **Time range filtering** — Presets (this year, last year, last 6 months, etc.) or custom date range
-- **Rich visualization** — Daily bar charts, cumulative line charts, detailed daily tables
-- **Data insights** — Average lines/commit, add/delete ratio, most active days, peak day detection
-- **Auto credential detection** — Reads token from `gh` CLI and username from git config, no manual input needed
-- **i18n** — English and Chinese, auto-detected from system locale / timezone
-- **Private repos** — Include private repos when authenticated via GitHub token
-- **Dark theme** — GitHub-style dark UI
-- **Cross-platform** — macOS, Windows, Linux
+- **活动栏集成** — 专属视图容器，显示在 VS Code 活动栏
+- **GitHub OAuth** — 使用 VS Code 内置 GitHub 认证，无需手动输入 Token
+- **多仓库分析** — 分析名下所有仓库（包括私有仓库和开源贡献）
+- **增量缓存** — 首次分析后只拉取新提交，后续分析速度大幅提升
+- **统计可视化** — 提交数、新增/删除行数、仓库分布
 
-## Quick Start
+## 安装
+
+下载 [最新 VSIX](https://github.com/programmerloverun/github-commit-analyst/releases/tag/v1.0.0-vscode)：
 
 ```bash
-# Prerequisites: Node.js >= 18, gh CLI (recommended)
+code --install-extension github-commit-analyst-vscode-1.0.0.vsix
+```
+
+或在 VS Code 中：`Cmd+Shift+P` → "Extensions: Install from VSIX..." → 选择下载的 `.vsix` 文件
+
+## 使用
+
+1. 点击活动栏的 **GitHub Commit Analyst** 图标
+2. 点击 **Sign in with GitHub** 授权
+3. 选择要分析的仓库和时间范围
+4. 点击 **Analyze** 查看结果
+
+## 开发
+
+```bash
 npm install
-npm run dev
+npm run compile    # 编译 TypeScript
+npx @vscode/vsce package  # 打包 vsix
 ```
 
-The app auto-detects your GitHub credentials from `gh auth token` and `git config`. Works immediately if you've run `gh auth login` before.
+## 技术栈
 
-## Manual Setup
-
-If auto-detection fails, enter your GitHub username and a [personal access token](https://github.com/settings/tokens) with `repo` scope.
-
-## Usage
-
-1. Enter GitHub username (auto-detected if `gh` CLI is configured)
-2. Select repositories to analyze
-3. Choose a time range preset or custom dates
-4. Click **Analyze** to view commit statistics
-5. Switch time ranges instantly — data is cached locally
-6. Use **Force Full Refresh** to clear cache and re-fetch everything
-
-## Development
-
-```bash
-npm run dev       # Development with hot reload
-npm run build     # Production build
-npm run package   # Package as desktop installer (dmg/nsis/AppImage)
-```
-
-## Tech Stack
-
-- **Electron** — Cross-platform desktop shell
-- **React 19 + TypeScript** — UI
-- **Vite** — Bundler (via electron-vite)
-- **Recharts** — Data visualization
+- **VS Code Extension API** — WebviewViewProvider
+- **TypeScript** — 扩展后端
 - **Octokit** — GitHub REST API
-- **electron-builder** — Packaging
+- **Vanilla JS + CSS** — Webview 前端
+
+## 其他版本
+
+- [macOS 侧边栏工具](https://github.com/programmerloverun/github-commit-analyst/releases/tag/v1.1.0-sidebar)
+- [IntelliJ IDEA 插件](https://github.com/programmerloverun/github-commit-analyst/releases/tag/v1.0.0-idea)
 
 ## License
 
