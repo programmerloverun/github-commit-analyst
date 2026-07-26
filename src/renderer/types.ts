@@ -15,6 +15,29 @@ export interface RepoInfo {
   description: string
   isPrivate: boolean
   source: 'own' | 'contributed'
+  updatedAt: string
+}
+
+export type SortKey = 'stars-desc' | 'stars-asc' | 'name-asc' | 'name-desc' | 'updated-desc' | 'updated-asc'
+
+export function sortRepos(repos: RepoInfo[], sort: SortKey): RepoInfo[] {
+  const sorted = [...repos]
+  switch (sort) {
+    case 'stars-desc': return sorted.sort((a, b) => b.stars - a.stars)
+    case 'stars-asc': return sorted.sort((a, b) => a.stars - b.stars)
+    case 'name-asc': return sorted.sort((a, b) => a.name.localeCompare(b.name))
+    case 'name-desc': return sorted.sort((a, b) => b.name.localeCompare(a.name))
+    case 'updated-desc': return sorted.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    case 'updated-asc': return sorted.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
+    default: return sorted
+  }
+}
+
+export interface RepoStats {
+  fullName: string
+  commits: number
+  additions: number
+  deletions: number
 }
 
 export interface OverallStats {
@@ -24,6 +47,7 @@ export interface OverallStats {
   totalAdditions: number
   totalDeletions: number
   repoCount: number
+  repoStats: RepoStats[]
 }
 
 export type TimeRange =
@@ -84,6 +108,7 @@ export interface Api {
     until?: string
   }) => Promise<OverallStats>
   clearCache: (params: { username: string }) => Promise<void>
+  openExternal: (url: string) => Promise<void>
 }
 
 declare global {

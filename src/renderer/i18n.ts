@@ -63,7 +63,19 @@ const translations: Record<Lang, Record<string, string>> = {
     own: '我的仓库',
     changeUser: '切换用户',
     language: '语言',
-    commitLineChanges: '提交行数变化'
+    commitLineChanges: '提交行数变化',
+    sortBy: '排序',
+    sortStarsDesc: 'Star 数 ↓',
+    sortStarsAsc: 'Star 数 ↑',
+    sortNameAsc: '名称 A-Z',
+    sortNameDesc: '名称 Z-A',
+    sortUpdatedDesc: '最近更新',
+    sortUpdatedAsc: '最早更新',
+    networkGraph: '贡献网络图',
+    byStars: '按 Star 数',
+    byCommits: '按提交次数',
+    closerMeansMore: '越近表示越多',
+    nodeSize: '节点大小表示相对数量'
   },
   en: {
     title: 'GitHub Commit Analyst',
@@ -127,7 +139,19 @@ const translations: Record<Lang, Record<string, string>> = {
     own: 'My Repos',
     changeUser: 'Change user',
     language: 'Language',
-    commitLineChanges: 'Commit Line Changes'
+    commitLineChanges: 'Commit Line Changes',
+    sortBy: 'Sort',
+    sortStarsDesc: 'Stars ↓',
+    sortStarsAsc: 'Stars ↑',
+    sortNameAsc: 'Name A-Z',
+    sortNameDesc: 'Name Z-A',
+    sortUpdatedDesc: 'Recent',
+    sortUpdatedAsc: 'Oldest',
+    networkGraph: 'Contribution Network',
+    byStars: 'By Stars',
+    byCommits: 'By Commits',
+    closerMeansMore: 'Closer = more',
+    nodeSize: 'Node size = relative volume'
   }
 }
 

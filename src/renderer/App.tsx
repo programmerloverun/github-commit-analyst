@@ -6,6 +6,7 @@ import StatsCards from './components/StatsCards'
 import DailyTable from './components/DailyTable'
 import CommitCharts from './components/CommitCharts'
 import AnalysisPanel from './components/AnalysisPanel'
+import NetworkGraph from './components/NetworkGraph'
 import type { RepoInfo, OverallStats, TimeRange } from './types'
 import { timeRangeToParams } from './types'
 import { type Lang, t, loadLang, saveLang, detectLocale } from './i18n'
@@ -244,6 +245,12 @@ export default function App() {
           </div>
           <StatsCards stats={stats} lang={lang} />
           <CommitCharts dailyStats={stats.dailyStats} lang={lang} />
+          <NetworkGraph
+            repoStats={stats.repoStats}
+            repos={repos}
+            username={username}
+            lang={lang}
+          />
           <AnalysisPanel stats={stats} lang={lang} />
           <DailyTable dailyStats={stats.dailyStats} lang={lang} />
         </>

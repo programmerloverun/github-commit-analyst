@@ -9,7 +9,9 @@ const api = {
   fetchAllStats: (params: { username: string; repos: { owner: string; name: string }[]; token?: string; since?: string; until?: string }) =>
     ipcRenderer.invoke('fetch-all-stats', params) as Promise<OverallStats>,
   clearCache: (params: { username: string }) =>
-    ipcRenderer.invoke('clear-cache', params) as Promise<void>
+    ipcRenderer.invoke('clear-cache', params) as Promise<void>,
+  openExternal: (url: string) =>
+    ipcRenderer.invoke('open-external', url)
 }
 
 contextBridge.exposeInMainWorld('api', api)

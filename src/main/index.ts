@@ -95,6 +95,10 @@ ipcMain.handle(
   }
 )
 
+ipcMain.handle('open-external', async (_event, url: string) => {
+  shell.openExternal(url)
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()

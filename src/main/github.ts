@@ -19,6 +19,14 @@ export interface RepoInfo {
   description: string
   isPrivate: boolean
   source: 'own' | 'contributed'
+  updatedAt: string
+}
+
+export interface RepoStats {
+  fullName: string
+  commits: number
+  additions: number
+  deletions: number
 }
 
 export interface OverallStats {
@@ -28,6 +36,7 @@ export interface OverallStats {
   totalAdditions: number
   totalDeletions: number
   repoCount: number
+  repoStats: RepoStats[]
 }
 
 // ---- Cache layer ----
@@ -151,7 +160,8 @@ export async function fetchUserRepos(
         language: r.language ?? '',
         description: r.description ?? '',
         isPrivate: r.private ?? false,
-        source: 'own'
+        source: 'own',
+        updatedAt: r.updated_at ?? ''
       })
     }
 
@@ -178,7 +188,8 @@ async function searchContributedRepos(
   octokit: Octokit,
   username: string
 ): Promise<RepoInfo[]> {
-  const repoMap = new Map<number, RepoInfo>()
+  // Step 1: find all unique repos the user contributed to via search
+  const foundRepos = new Map<number, { owner: string; name: string; fork: boolean }>()
   let page = 1
 
   while (page <= 10) {
@@ -195,21 +206,13 @@ async function searchContributedRepos(
 
       for (const item of data.items) {
         const repo = item.repository
-        if (!repo || repoMap.has(repo.id)) continue
-        // Skip forks AND repos owned by the user (already in own list)
-        if (repo.fork) continue
+        if (!repo || foundRepos.has(repo.id)) continue
         if (repo.owner.login === username) continue
 
-        repoMap.set(repo.id, {
-          id: repo.id,
+        foundRepos.set(repo.id, {
           owner: repo.owner.login,
           name: repo.name,
-          fullName: repo.full_name,
-          stars: repo.stargazers_count ?? 0,
-          language: repo.language ?? '',
-          description: repo.description ?? '',
-          isPrivate: repo.private ?? false,
-          source: 'contributed'
+          fork: repo.fork ?? false
         })
       }
 
@@ -217,6 +220,43 @@ async function searchContributedRepos(
       page++
     } catch {
       break
+    }
+  }
+
+  if (foundRepos.size === 0) return []
+
+  // Step 2: resolve ALL repos via the full repo API to get accurate star counts
+  const repoList = Array.from(foundRepos.values())
+  const resolved = await runWithConcurrency(repoList, async (r) => {
+    try {
+      const { data: fullRepo } = await octokit.rest.repos.get({
+        owner: r.owner,
+        repo: r.name
+      })
+      // For forks, use the parent (upstream) repo
+      const upstream = fullRepo.parent ?? fullRepo.source ?? fullRepo
+      return {
+        id: upstream.id,
+        owner: upstream.owner.login,
+        name: upstream.name,
+        fullName: upstream.full_name,
+        stars: upstream.stargazers_count ?? 0,
+        language: upstream.language ?? '',
+        description: upstream.description ?? '',
+        isPrivate: upstream.private ?? false,
+        source: 'contributed' as const,
+        updatedAt: upstream.updated_at ?? ''
+      }
+    } catch {
+      return null
+    }
+  })
+
+  // Step 3: deduplicate (multiple forks may resolve to same parent) and filter
+  const repoMap = new Map<number, RepoInfo>()
+  for (const r of resolved) {
+    if (r && !repoMap.has(r.id) && r.owner !== username) {
+      repoMap.set(r.id, r)
     }
   }
 
@@ -291,51 +331,54 @@ async function processOneRepo(
   repo: { owner: string; name: string },
   userCache: UserCache,
   combinedMap: Map<string, DailyRecord>,
-  now: string
+  now: string,
+  since?: string,
+  until?: string
 ): Promise<boolean> {
   const repoKey = `${repo.owner}/${repo.name}`
   const cachedRepo = userCache[repoKey]
-  let repoHasData = false
+  let hasData = false
 
   if (cachedRepo) {
-    mergeDailyMap(combinedMap, cachedRepo.dailyMap)
-    repoHasData = Object.keys(cachedRepo.dailyMap).length > 0
-
+    // Incremental fetch: only commits since last cache update
     const newCommits = await fetchRepoCommits(octokit, username, repo, cachedRepo.lastFetched)
 
     if (newCommits.size > 0) {
-      const newMap: Record<string, DailyRecord> = {}
+      // Merge new commits into the existing cache
       for (const [d, r] of newCommits) {
-        newMap[d] = r
-        const cur = combinedMap.get(d) || { commits: 0, additions: 0, deletions: 0 }
-        combinedMap.set(d, {
-          commits: cur.commits + r.commits,
-          additions: cur.additions + r.additions,
-          deletions: cur.deletions + r.deletions
-        })
+        const existing = cachedRepo.dailyMap[d]
+        cachedRepo.dailyMap[d] = existing
+          ? { commits: existing.commits + r.commits, additions: existing.additions + r.additions, deletions: existing.deletions + r.deletions }
+          : r
       }
-      userCache[repoKey] = {
-        lastFetched: now,
-        dailyMap: { ...cachedRepo.dailyMap, ...newMap }
-      }
-      repoHasData = true
+      userCache[repoKey] = { lastFetched: now, dailyMap: cachedRepo.dailyMap }
     } else {
       userCache[repoKey] = { ...cachedRepo, lastFetched: now }
     }
+
+    hasData = Object.keys(userCache[repoKey].dailyMap).length > 0
+    mergeDailyMap(combinedMap, userCache[repoKey].dailyMap)
   } else {
+    // First fetch: always pull ALL commits so the cache has complete data.
+    // Time range filtering is done at the display layer, not the cache layer.
     const newCommits = await fetchRepoCommits(octokit, username, repo)
-    repoHasData = newCommits.size > 0
+    hasData = newCommits.size > 0
 
     const newMap: Record<string, DailyRecord> = {}
     for (const [d, r] of newCommits) {
       newMap[d] = r
-      combinedMap.set(d, r)
+      const cur = combinedMap.get(d) || { commits: 0, additions: 0, deletions: 0 }
+      combinedMap.set(d, {
+        commits: cur.commits + r.commits,
+        additions: cur.additions + r.additions,
+        deletions: cur.deletions + r.deletions
+      })
     }
 
     userCache[repoKey] = { lastFetched: now, dailyMap: newMap }
   }
 
-  return repoHasData
+  return hasData
 }
 
 export async function fetchAllCommitStats(
@@ -350,12 +393,15 @@ export async function fetchAllCommitStats(
   const now = new Date().toISOString()
   const combinedMap = new Map<string, DailyRecord>()
 
-  // Process all repos with thread pool
-  const results = await runWithConcurrency(repos, (repo) =>
-    processOneRepo(octokit, username, repo, userCache, combinedMap, now)
-  )
+  console.log(`[fetchAllCommitStats] since=${since}, until=${until}, repos=${repos.length}`)
 
-  const validRepoCount = results.filter(Boolean).length
+  // Process all repos with thread pool
+  const results = await runWithConcurrency(repos, async (repo) => {
+    const hasData = await processOneRepo(octokit, username, repo, userCache, combinedMap, now, since, until)
+    return { hasData, fullName: `${repo.owner}/${repo.name}` }
+  })
+
+  const validRepoCount = results.filter(r => r.hasData).length
 
   saveUserCache(username, userCache)
 
@@ -376,12 +422,36 @@ export async function fetchAllCommitStats(
 
   dailyStats.sort((a, b) => a.date.localeCompare(b.date))
 
+  // Compute per-repo stats from cache, respecting time range
+  const repoStats: RepoStats[] = []
+  for (const repo of repos) {
+    const repoKey = `${repo.owner}/${repo.name}`
+    const cached = userCache[repoKey]
+    if (!cached) continue
+    let commits = 0, additions = 0, deletions = 0
+    let hasData = false
+    for (const [date, rec] of Object.entries(cached.dailyMap)) {
+      if (since && date < since) continue
+      if (until && date > until) continue
+      commits += rec.commits
+      additions += rec.additions
+      deletions += rec.deletions
+      hasData = true
+    }
+    if (hasData) {
+      repoStats.push({ fullName: repoKey, commits, additions, deletions })
+    }
+  }
+
+  console.log(`[fetchAllCommitStats] filtered: ${dailyStats.length} days, commits=${totalCommits}, adds=${totalAdditions}, dels=${totalDeletions}`)
+
   return {
     username,
     dailyStats,
     totalCommits,
     totalAdditions,
     totalDeletions,
-    repoCount: validRepoCount
+    repoCount: validRepoCount,
+    repoStats
   }
 }
