@@ -1,0 +1,14 @@
+appId: com.github-commit-analyst.app
+productName: GitHub Commit Analyst
+directories:
+  output: dist
+files:
+  - out/**/*
+mac:
+  target: dmg
+  category: public.app-category.developer-tools
+win:
+  target: nsis
+linux:
+  target: AppImage
+  category: Development

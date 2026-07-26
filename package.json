@@ -1,0 +1,27 @@
+{
+  "name": "github-commit-analyst",
+  "version": "1.0.0",
+  "description": "Cross-platform desktop app for GitHub commit analysis",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-vite build && electron-builder"
+  },
+  "dependencies": {
+    "@octokit/rest": "^22.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.10.1",
+    "typescript": "^5.8.0"
+  }
+}
