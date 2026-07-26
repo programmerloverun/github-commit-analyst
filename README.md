@@ -8,6 +8,20 @@
 | **VS Code 插件** | 活动栏集成，GitHub OAuth 一键登录 | [VSIX 下载](https://github.com/programmerloverun/github-commit-analyst/releases/tag/v1.0.0-vscode) |
 | **IntelliJ IDEA 插件** | 右侧工具窗口，原生 Swing UI | [ZIP 下载](https://github.com/programmerloverun/github-commit-analyst/releases/tag/v1.0.0-idea) |
 
+## 效果预览
+
+### macOS 侧边栏工具
+
+| 主界面 | 仓库选择 | 分析结果 |
+|:---:|:---:|:---:|
+| ![overview](docs/images/sidebar-overview.png) | ![repo](docs/images/sidebar-repos.png) | ![stats](docs/images/sidebar-stats.png) |
+
+### VS Code 插件
+
+| 主界面 | 分析结果 |
+|:---:|:---:|
+| ![main](docs/images/vscode-main.png) | ![stats](docs/images/vscode-stats.png) |
+
 ## 功能
 
 - **多仓库分析** — 分析名下所有仓库（包括私有仓库和开源贡献）
