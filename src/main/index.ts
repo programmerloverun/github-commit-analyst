@@ -85,6 +85,8 @@ function createWindow(): void {
     minWidth: SIDEBAR_WIDTH,
     maxWidth: SIDEBAR_WIDTH,
     frame: false,
+    transparent: true,
+    vibrancy: 'sidebar',
     hasShadow: true,
     alwaysOnTop: true,
     skipTaskbar: true,
