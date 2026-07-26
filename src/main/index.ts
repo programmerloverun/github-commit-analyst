@@ -10,22 +10,31 @@ let hideTimer: ReturnType<typeof setInterval> | null = null
 const SIDEBAR_WIDTH = 380
 const TAB_WIDTH = 20
 
-function exec(cmd: string): string {
+// GUI apps on macOS don't inherit shell PATH; resolve common binary locations
+const HOME = process.env.HOME || ''
+const GH_BIN = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', 'gh'].find(p => {
+  try { execSync(`test -x ${p}`, { stdio: 'ignore' }); return true } catch { return false }
+}) || 'gh'
+const GIT_BIN = '/usr/bin/git'
+
+const SHELL_ENV = { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` }
+
+function exec(cmd: string, useShellEnv?: boolean): string {
   try {
-    return execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim()
+    return execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], env: useShellEnv ? SHELL_ENV : process.env }).trim()
   } catch {
     return ''
   }
 }
 
 function detectLocalAuth(): { username: string; token: string } {
-  const token = exec('gh auth token --hostname github.com 2>/dev/null')
-  let username = exec('git config --global github.user')
+  const token = exec(`${GH_BIN} auth token --hostname github.com`, true)
+  let username = exec(`${GIT_BIN} config --global github.user`, true)
   if (!username && token) {
-    username = exec(`gh api user --jq .login 2>/dev/null`)
+    username = exec(`${GH_BIN} api user --jq .login`, true)
   }
   if (!username) {
-    username = exec('git config --global user.name')
+    username = exec(`${GIT_BIN} config --global user.name`, true)
   }
   return { username, token }
 }
